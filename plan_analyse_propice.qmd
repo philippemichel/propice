@@ -1,0 +1,91 @@
+---
+title: "PROPICE"
+subtitle: "Plan d'analyse statistique"
+author: "Philippe MICHEL"
+date: "`r format(Sys.Date(),'%d %B %Y')`"
+bibliography: stat.bib
+thanks: "Manon GAUTIER, Dr Edouard BEGON - Dermatologie"
+subtitle: "Plan d'analyse statistique"
+author: "Philippe MICHEL"
+lang: fr-FR
+date: today
+date-format: "DD/MM/YYYY"
+format: pdf
+pdf-engine: lualatex
+keep-tex: true
+number-sections: true
+toc: false
+lof: false
+lot: false
+mainfont: Faune
+mainfontoptions:
+  - Numbers=OldStyle
+  - Ligatures=TeX
+sansfont: Myriad Pro
+sansfontoptions:
+  - Ligatures=TeX
+mathfontoptions: 
+  - Numbers=Proportional
+fig-cap-location: bottom
+tbl-cap-location: top
+class: scrartcl
+classoption: [french]
+papersize: a4paper
+editor: source
+cite-method: biblatex
+license: "CC BY-SA"
+execute: 
+  echo: false
+  warning: false
+  message: false
+---
+
+
+```{r}
+#| label: info
+rm(list=ls())
+library("baseph")
+library("tidyverse")
+library("kableExtra")
+# sessionInfo()
+```
+
+Ce document ne concerne que l'analyse statistique des données.
+
+Il s'agit d'une étude purement observationnelle. Le risque $\alpha$ retenu est de 0,05 *&* la puissance de 0,8. Des graphiques seront réalisés pour tous les résultats intéressants. Le nombre de sujets nécessaire a été évalué à 74.
+
+## Description de la population
+
+La population sera présentée sur deux tableaux :
+
+- Caractéristiques démographiques, motif de consultation et diagnostic retenu;
+- Mode d’adressage, parcours du patient avant consultation et devenir immédiat du patient après consultation.
+
+Les données numériques seront présentées par leur médiane avec les quartiles, les données catégorielles par le nombre *&* le pourcentage avec son intervalle de confiance calculé par bootstrap. es graphiques pourront être réalisés pour les variables importantes.
+
+Le décompte des données manquantes variable par variable sera réalisé & présenté par un tableau ou un graphique. Une analyse de corrélations portant sur tous les items sera réalisée. À la suite de ces contrôles des variables pourront être exclues de la suite de l'analyse (trop de donnée manquantes ou variables trop corrélées) avec l'accord du promoteur. 
+
+Une analyse factorielle sera tentée (Analyse en Correspondances Multiples) après imputation des données manquantes avec classification des cas si possible.
+
+
+
+Un lien entre les données concernant l'appel ou l'expérience de l'ARM *&* ce temps sera réalisé par des tests du $\chi^2$ pour les variables discrètes *&* des tests de Wilcoxon pour les données numériques. Une analyse multivariée par régression linéaire sera ensuite réalisée en incorporant dans un premier temps incorporant les toutes les variables ayant une p-value \< 0,20 sur l'analyse monovariée. Une recherche du meilleur modèle sera ensuite réalisé par un step-by-step descendant. Pour la détermination du meilleur modèle de régression logistique par step-by-step sur le critère principal, on utilisera un jeu de données après imputation des données manquantes. Par contre, une fois le modèle retenu, les calculs présentés seront réalisés sur les données réelles.
+
+## Objectifs secondaires
+
+### Rayonnement territorial & mode d'adressage
+
+L'étude sera réalisé en croisant le lieu d’habitation du patient avec le mode d'adressage (professionnel de santé ? lequel ?). des tests du $\chi^2$ seront utilisé si les effectifs le permettent. Une représentation cartographique pourra être dessinée.
+
+### Concordance diagnostique
+
+La concordance entre le diagnostic d’adressage et le diagnostic posé à l’issue de la consultation sera présentée sur un tableau & mesurée par un tet de Kaplan-Cohen. Un diagramme de flux présentera les évolutions diagnostiques les plus fréquentes.
+
+### Réalité de l'urgence
+
+### Gravité du cas
+
+### Technique {.appendix}
+
+L'analyse statistique sera réalisée avec le logiciel **R**[@rstat] & divers packages en particulier `tidyverse` [@tidy], `FactoMineR` [@facto] & `epiDisplay` [@epid].
+
