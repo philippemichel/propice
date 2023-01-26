@@ -7,5 +7,3 @@
 Étude clinique observationelle
 
 26/01/23 Plan d'anlyse incomplet
-
-
