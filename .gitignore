@@ -36,3 +36,6 @@ plan_analyse_propice.qmd
 QTDublinIrish.otf
 _extensions
 propice_plan_analyse.tex
+/.quarto/
+rapport.tex
+test.R

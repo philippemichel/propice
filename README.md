@@ -8,5 +8,7 @@
 Étude clinique observationelle
 
 30/03/2023 **plan d'analyse** terminé
+
+03/08/2023 : **Rapport statistique** Tableaux & graphiques descriptifs. 
  
 

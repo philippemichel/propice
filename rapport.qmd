@@ -1,0 +1,384 @@
+---
+subtitle: "Rapport Statistique"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE, cache = FALSE) 
+```
+
+```{r}
+#| label: lib
+
+rm(list = ls())
+expx <- FALSE
+classeur <- "propice1.xls"
+#
+library(baseph)
+library(janitor)
+library(tidyverse)
+library(gtsummary)
+library(kableExtra)
+library(lubridate)
+library(kableExtra)
+library(forestmodel)
+library(labelled)
+library(epiDisplay)
+library(visdat)
+#
+theme_gtsummary_language(language = "fr", decimal.mark = ",")
+options(OutDec = ",")
+```
+
+# Contrôle de l'échantillon
+
+```{r}
+#| label: import
+
+rm(ttpat)
+ttpat <- read_delim("datas/PROPICE_test.csv", delim = ";", show_col_types = FALSE) |> 
+   mutate_if(is.character, as.factor) |>
+  janitor::clean_names()
+bn <- read_delim("datas/bnom.csv", delim = ";", show_col_types = FALSE)
+var_label(ttpat ) <- bn$titre
+ttpat <- ttpat |> 
+ dplyr::select(!(1:4)) |> 
+ dplyr::select(!(ends_with("txt"))) |> 
+ mutate(profsantnbr = as.factor(profsantnbr)) |> 
+ mutate(departt = as.factor(departt))
+
+var_label(ttpat$profsantnbr) <- "Nombre de professionnel consulté avant pour ce motif"
+var_label(ttpat$departt) <- "Département du domicile"
+
+## Recodage de tt$devenir
+ttpat$devenir <- ttpat$devenir %>%
+ fct_recode(
+  "adressé en autre filière de soins" = " adressé en autre filière de soins, si oui préciser la filière",
+  "Revu en consultation post urgences" = " Revu en consultation post-urgences"
+ )
+```
+
+## Données manquantes
+
+```{r}
+#| label: fig-manq-apt
+#| fig-cap: Données manquantes (questionnaire patient)
+
+vis_dat(ttpat , palette = "qual")
+```
+
+
+# Description de la population
+
+L'échantillon comporte `r nrow(ttpat)` cas pour `r ncol(ttpat)` variables.
+
+## Démographie
+
+
+```{r}
+#| label: tbl-desc1
+#| tbl-cap: Tableau descriptif
+
+ttpat |>
+ dplyr::select(1:4) |>
+ tbl_summary(missing = "no") |>
+ modify_header(label ~ " ") |>
+ add_n() |>
+ bold_labels() |>
+ pexptabph(
+  lg = FALSE,
+  exp = expx,
+  nomfich = classeur,
+  nomsheet = "desc1"
+ )
+```
+
+```{r}
+#| label: fig-pyr
+#| fig-cap: Pyramide des âges
+pyramid(ttpat$age,ttpat$sex, col.gender = c("pink", "lightblue"), binwidth = 10, main = "Pyramide des âges")
+```
+
+
+## Adressage
+
+```{r}
+#| label: tbl-adress
+#| tbl-cap: Adressage du patient
+
+ttpat |>
+ dplyr::select(5:7) |>
+ tbl_summary(missing = "no") |>
+ modify_header(label ~ " ") |>
+ add_n() |>
+ bold_labels() |>
+ pexptabph(
+  lg = FALSE,
+  exp = expx,
+  nomfich = classeur,
+  nomsheet = "adress"
+ )
+```
+
+## Antécédents
+
+```{r}
+#| label: tbl-atcd
+#| tbl-cap: Antécédents du patient
+
+ttpat |>
+ dplyr::select(starts_with("atcd")) |>
+ tbl_summary(missing = "no") |>
+ modify_header(label ~ " ") |>
+ add_n() |>
+ bold_labels() |>
+ pexptabph(
+  lg = FALSE,
+  exp = expx,
+  nomfich = classeur,
+  nomsheet = "atcd"
+ )
+```
+
+## Motif de la consultation
+
+```{r}
+#| label: tbl-motif
+#| tbl-cap: Motif de la consultation
+
+mm <-  bn[16:23, ] |>
+  dplyr::select(titre) |>
+  mutate(titre = str_sub(titre, 9))
+
+zz <- ttpat |>
+  dplyr::select(starts_with("motif")) |>
+  pivot_longer(1:8) |>
+  mutate_all(as_factor)
+levels(zz$name) <- mm$titre
+tbl_cross(
+  zz,
+  name,
+  value,
+  percent = "row",
+  missing = "no",
+  margin = NULL,
+  label = list(name ~ "Motif", value ~ " ")
+) |>
+  modify_header(label ~ "") |>
+  bold_labels() |> 
+   pexptabph(
+  lg = FALSE,
+  exp = expx,
+  nomfich = classeur,
+  nomsheet = "motif"
+ )
+```
+
+```{r}
+#| label: fig-motif
+#| fig-cap: Motifs d'envoi
+
+zz <- ttpat |>
+  dplyr::select(starts_with("motif")) |>
+  pivot_longer(1:8) |>
+  mutate_all(as_factor) |>
+  drop_na(value)
+levels(zz$name) <- mm$titre
+#
+zz |>
+  ggplot() +
+  aes(x = name,  fill = value) +
+  geom_bar(stat = "count", position = "fill") +
+  coord_flip() +
+  labs(
+    title = "Motifs d'envoi",
+    subtitle = "",
+    x = "",
+    y = "%",
+    caption = "Motifs d'envoi aux urgences dermatologiques",
+    fill = "",
+    label = "fig-motif"
+  ) +
+  scale_y_continuous(breaks = seq(0, 1, .2), labels = seq(0, 100, 20)) +
+  theme_light() +
+  colorspace::scale_fill_discrete_qualitative(palette = "Dark 3") +
+  theme(
+    plot.title = element_text(size = 16, face = "bold"),
+    plot.subtitle = element_text(size = 12),
+    axis.title.x = element_text(size = 12),
+    legend.title = element_text(size = 12),
+    axis.title.y = element_text(
+      size = 12,
+      angle = 0,
+      vjust = .5
+    ),
+    axis.text.x = element_text(size = 12),
+    axis.text.y = element_text(size = 12),
+    legend.position = "none"
+  )
+```
+
+
+## Clinique
+
+```{r}
+#| label: tbl-clinique
+#| tbl-cap: Tableau clinique
+
+ttpat |>
+ dplyr::select(19:25) |> 
+ tbl_summary(missing = "no") |>
+ modify_header(label ~ " ") |>
+ add_n() |>
+ bold_labels() |>
+ pexptabph(
+  lg = FALSE,
+  exp = expx,
+  nomfich = classeur,
+  nomsheet = "clinique"
+ )
+```
+
+## Professionnels consultés avant
+
+```{r}
+#| label: tbl-profav
+#| tbl-cap: Professionnels consultés avant
+
+ttpat |>
+ dplyr::select(26:33) |> 
+ tbl_summary(missing = "no") |>
+ modify_header(label ~ " ") |>
+ add_n() |>
+ bold_labels() |>
+ pexptabph(
+  lg = FALSE,
+  exp = expx,
+  nomfich = classeur,
+  nomsheet = "profav"
+ )
+```
+
+## Diagnostic final
+
+```{r}
+#| label: tbl-diagfin
+#| tbl-cap: Diagnostic final
+
+
+
+mmd <-  bn[42:50, ] |>
+  dplyr::select(titre) |>
+  mutate(titre = str_sub(titre, 14))
+
+zz <- ttpat |>
+  dplyr::select(starts_with("diag")) |> 
+  pivot_longer(1:9) |> 
+  mutate_all(as_factor)
+levels(zz$name) <- mmd$titre
+tbl_cross(
+  zz,
+  name,
+  value,
+  percent = "row",
+  missing = "no",
+  margin = NULL,
+  label = list(name ~ "Diagnostic final", value ~ " ")
+) |>
+  modify_header(label ~ "") |>
+  bold_labels() |> 
+   pexptabph(
+  lg = FALSE,
+  exp = expx,
+  nomfich = classeur,
+  nomsheet = "diagfin"
+ )
+```
+
+```{r}
+#| label: fig-daig
+#| fig-cap: Diagnostic final
+#| 
+zz <- ttpat |>
+  dplyr::select(starts_with("diag")) |>
+  pivot_longer(1:9) |>
+  mutate_all(as_factor) |>
+  drop_na(value)
+levels(zz$name) <- mmd$titre
+#
+zz |>
+  ggplot() +
+  aes(x = name,  fill = value) +
+  geom_bar(stat = "count", position = "fill") +
+  coord_flip() +
+  labs(
+    title = "Diagnostic final",
+    subtitle = "",
+    x = "",
+    y = "%",
+    caption = "Diagnostic final"
+  ) +
+  scale_y_continuous(breaks = seq(0, 1, .2), labels = seq(0, 100, 20)) +
+  theme_light() +
+  colorspace::scale_fill_discrete_qualitative(palette = "Dark 3") +
+  theme(
+    plot.title = element_text(size = 16, face = "bold"),
+    plot.subtitle = element_text(size = 12),
+    axis.title.x = element_text(size = 12),
+    legend.title = element_text(size = 12),
+    axis.title.y = element_text(
+      size = 12,
+      angle = 0,
+      vjust = .5
+    ),
+    axis.text.x = element_text(size = 12),
+    axis.text.y = element_text(size = 12),
+    legend.position = "none"
+  )
+```
+
+## Devenir
+
+```{r}
+#| label: tbl-devenir
+#| tbl-cap: Devenir du patient 
+
+ttpat |>
+ dplyr::select(43) |> 
+ tbl_summary(missing = "no") |>
+ modify_header(label ~ " ") |>
+ add_n() |>
+ bold_labels() |>
+ pexptabph(
+  lg = FALSE,
+  exp = expx,
+  nomfich = classeur,
+  nomsheet = "devenir"
+ )
+```
+
+# Critères secondaires
+
+## Rayonnement territorial
+*Analyser le rayonnement territorial de la consultation (patient)*
+
+## Médecins généralistes adresseurs
+*Déterminer la proportion de médecins généralistes adresseurs et leur localisation (généraliste)*
+
+## Concordance diagnostique
+*Analyser la concordance entre le diagnostic d’adressage et le diagnostic posé à l’issue de la consultation (patient)*
+
+## Réalité de l’urgence
+*Analyser la réalité de l’urgence ayant motivé la consultation (patient)*
+
+## facteurs associés
+*Identifier des facteurs associés à la gravité des patients (patient)* 
+
+## Besoins des médecins généralistes
+*Identifier les besoins des médecins généralistes adresseurs (généraliste)* 
+
+## Technique
+
+Les données démographiques on été décrites par la médiane & les quartiles pour les données numériques, en pourcentage pour les données catégorielles. Les intervalles de confiance ont été calculés par bootstrap.
+Pour le critère principal la comparaison des deux groupes a été réalisée par un test de Wilcoxon sur séries appariées. La recherche de facteurs prédictifs a été réalisée par des test ANOVA. Vu le grand nombre de tests la limite de significabilité a été définie à 0,01.
+
+L'analyse statistique a été réalisée grâce au logiciel **R**[@rstat] & à divers packages en particulier `tidyverse`[@tidy], `FactoMineR`[@facto] & `epiDisplay`[@epid].
