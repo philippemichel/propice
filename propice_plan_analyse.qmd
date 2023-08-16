@@ -1,64 +1,5 @@
 ---
-title: "PROPICE"
 subtitle: "Plan d'analyse statistique"
-author: 
-    - name: "Dr Philippe MICHEL"
-      affiliations:
-        name: "Hôpital NOVO"
-        department: "Unité de Soutien à la Recherche Clinique"
-    - name:  "Dr Dr Edouard BEGON"
-      affiliations:
-        name: "Hôpital NOVO"
-        department: "site de Pontoise -- Médecine interne  dermatologie"
-    - name:  "Manon GAUTIER"
-      affiliations:
-        name: "Hôpital NOVO"
-        department: "site de Pontoise -- Médecine interne  dermatologie"
-lang: fr-FR
-date: today
-date-format: "DD/MM/YYYY"
-format: 
-  titlepage-pdf:
-    titlepage: bg-image
-    titlepage-bg-image: "novo_usrc.png"
-    logo-space-after: "0\\baselineskip"
-    documentclass: scrartcl
-    classoption: ["oneside", "open=any"]
-    number-sections: true
-    titlepage-footer: "Étude prospective monocentrique"
-titlepage-theme:
-    title-fontstyle: ["Huge", "bfseries"]
-    title-color: #345d61
-    subtitle-color: #345d61
-    subtitle-fontstyle: ["huge"]
-    logo-size: "0.2\\textheight"
-jss-pdf:
-    keep-tex: true   
-pdf-engine: lualatex
-keep-tex: true
-number-sections: true
-toc: true
-lof: false
-lot: false
-mainfont: Faune
-mainfontoptions:
-  - Numbers=OldStyle
-  - Ligatures=TeX
-sansfont: Myriad Pro
-sansfontoptions:
-  - Ligatures=TeX
-fig-cap-location: bottom
-tbl-cap-location: top
-classoption: [french]
-papersize: a4paper
-editor: source
-bibliography: stat.bib
-cite-method: biblatex
-csl: jama.csl
-#reference-location: margin
-#citation-location: margin
-license: "CC BY-SA"
----
 ---
 
 ```{r setup, include= FALSE}
@@ -87,10 +28,10 @@ L'étude comporte deux questionnaires : un à destination des patients & un à d
 
 Le risque $\alpha$ retenu sera de 0,05 & la puissance de 0,8.
 
-Sauf indication contraires pour les tests simples les variables numériques seront comparées par un test de Student si possible ( effectifs suffisants, distribution normales (Test de Shapiro-Wilk), égalité des variances) auquel cas un test non paramétrique de Wilcoxon sera utilisé. Un test du $\chi^2$ sera utilisé pour les variables discrètes sous réserve d'un effectif suffisant. À défaut un test de Fischer sera utilisé. Des graphiques seront réalisés pour les résultats importants (package `ggplot2` [@ggplot]).
+Sauf indication contraires pour les tests simples les variables numériques seront comparées par un test de Student si possible ( effectifs suffisants, distribution normales (Test de Shapiro-Wilk), égalité des variances) auquel cas un test non paramétrique de Wilcoxon sera utilisé. Un test du $\chi^2$ de Pearson sera utilisé pour les variables discrètes sous réserve d'un effectif suffisant. À défaut un test exact de Fischer sera utilisé. Des graphiques seront réalisés pour les résultats importants (package `ggplot2` [@ggplot]).
 
 ## Taille de l'échantillon
- 
+
 
 ```{r}
 #| label: taille
@@ -106,26 +47,28 @@ Il s'agit d'une étude purement observationnelle sans test sur le critère princ
 
 ## Données manquantes
 
-Le décompte des données manquantes sera réalisé & présenté par un tableau ou un graphique. Les variables comportant trop de données manquantes ou non utilisables ne seront pas prises en compte après validation par le promoteur ainsi que les questionnaires très mal remplis (moins de 50 % des items remplis).
+Le décompte des données manquantes sera réalisé & présenté par un tableau ou un graphique. Les variables comportant trop de données manquantes ou non utilisables ne seront pas prises en compte après validation par le promoteur ainsi que les questionnaires très mal remplis (moins de 50 % des items remplis). Pour le motif de consultation si aucun n'est noté, on classera le cas dans *"Motif : Pas de diagnostic proposé". pour le diagnostic final en l'absence de réponse le cas sera éliminé.
 
 Après ce premier tri une imputation des données manquantes (package `missMDA` [@miss]) sera réalisée uniquement pour l'analyse factorielle & pour la recherche du meilleur modèle par step-by-tep descendant pour les analyses par régression (logistique ou linéaire). Néanmoins pour cette analyse, après choix du modèle, le calcul final sera fait avec les données réelles. 
 
-## Description de la population
 
-### Validation des questionnaires
+
+## Validation des questionnaires
 
 Ce chapitre ne concerne que la validation interne des deux questionnaires. 
 
 Une recherche de corrélation (package `corr` [@corr]) entre les variables sera réalisée. Si certaines variables se montreront trop corrélées elles devront être exclues de l'étude après accord du promoteur. 
 
-Chaque questionanire sera évalué après ces corrections par le test alpha de Cronbach (package `cronbach` [@cronb]). Un seuil de 80 % sera retenu comme valeur de validation.
+Chaque questionnaire sera évalué après ces corrections par le test alpha de Cronbach (package `cronbach` [@cronb]). Un seuil d'environ 70 % sera retenu comme satisfaisant.
 
 
-### Analyse simple
+### Analyse simple (Critère principal)
 
 La description de la population concerne :
 
-Un tableau présentera les valeurs démographiques & clinique pour l'ensemble de la population. Les valeurs, toutes discrètes, seront présentées en % avec son intervalle de confiance à 95 %.
+Un tableau présentera les valeurs démographiques & clinique pour l'ensemble de la population. Les valeurs, toutes discrètes, seront présentées en % avec son intervalle de confiance à 95 %. 
+
+le profil des patients sera résumé sur trois tableaux : Caractéristiques démographiques, motif de consultation & diagnostic final. Le parcours sera résumé sur trois tableaux : mode d'adressage, parcours avant la consulttaion & devenir immédiat après la consultation.
 
 
 ### Analyse factorielle
@@ -134,19 +77,21 @@ Si le nombre de cas recueillis le permet une analyse factorielle en Analyse de c
 
 Cette analyse ne pourra être qu'après imputation des données manquantes ce qui n'est possible que si ces dernières ne sont pas trop nombreuses.
 
-## Objectif principal
-
-Les résultats des deux questionnaires patient seront présentés par, pour chaque niveau de chaque item, le nombre & le pourcentage avec son intervalle de confiance à 95 % calculé sur nombre de réponses valides à l'item. Des graphiques seront tracés pour les items les plus représentatifs.
 
 ## Objectifs secondaires
 
-### Objectif 1 & 2
+### Objectif 1 
+*Analyser le rayonnement territorial de la consultation*
 
-*Analyser le rayonnement territorial de la consultation & le mode d'adressage*
 
-Le lieu de résidence (question 3) sera décris par le nombre (avec le pourcentage) de cas. Une représentation graphique par carte sera réalisée. 
+Le département de résidence (question 3) sera décris par le nombre (avec le pourcentage) de cas. Une représentation graphique par carte sera réalisée.
 
-Pour l'analyse géographique un regroupement des lieux sera réalisée : 
+### Objectif 1
+
+*Déterminer la proportion de médecins généralistes adresseurs et leur
+localisation*
+
+On connait le code postal de l'adresseur. Un regroupement des lieux sera réalisée : 
 
 - Cergy-Pontoise
 - 95 autre
@@ -156,14 +101,13 @@ Pour l'analyse géographique un regroupement des lieux sera réalisée :
 
 La localisation de l'adresseur (question 6) sera décris par le nombre (avec le pourcentage) de cas. Une représentation graphique par carte sera réalisée. L'analyse du mode d'adressage sera réalisée si possible (nombre de cas suffisants). La carte mettra en évidence le mode d'adressage avec si besoin un regroupement des niveaux. Un calcul des distances lieu de l'adresseur - Pontoise sera réalisé et présenté en tableau (vs le mode d'adressage) & par un graphique.
 
-Une présentation (tableau & carte) comparera l'adressage par le médecin traitant vs autre professionnel (questions 5 & 6) rapportée à la localisation. 
-
+Une présentation (tableau & carte) comparera l'adressage par le médecin traitant vs autre professionnel (questions 5 & 6) rapportée à la localisation.
 
 ### Ojectif 3
 
 *Analyser la concordance entre le diagnostic d’adressage et le diagnostic posé à l’issue de la consultation*
 
-La concordance globale entre le diagnostic d'adressage (question 8) & le diagnostic final (question 15) sera appréciée par analyse simple et un test Kappa de Cohen. L'analyse par une matrice Q (package cdmTools [@cmdt]) sera tentée. 
+La concordance globale entre le diagnostic d'adressage (question 8) & le diagnostic final (question 15) sera appréciée par analyse simple et un test Kappa de Cohen. L'analyse par une matrice Q (package `dmTools`[@cmdt]) sera tentée. 
 
 On regardera ensuite pour le diagnostic final, les cas où il y a le plus d'erreurs. Des graphiques pourront être tracés. 
 
