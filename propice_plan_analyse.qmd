@@ -1,5 +1,9 @@
 ---
 subtitle: "Plan d'analyse statistique"
+toc: true
+lof: false
+lot: false
+cache: true
 ---
 
 ```{r setup, include= FALSE}
@@ -18,7 +22,7 @@ library("kableExtra")
 # sessionInfo()
 ```
 
-## Généralités
+# Généralités
 
 Étude prospective monocentrique. Recherche N’Impliquant pas la Personne Humaine, questionnaire posé aux patients dans le cadre du soin courant. 
 
@@ -26,12 +30,13 @@ library("kableExtra")
 
 L'étude comporte deux questionnaires : un à destination des patients & un à destination des médecins généralistes qui ne sera utilisé que pour les objectifs secondaires.
 
-Le risque $\alpha$ retenu sera de 0,05 & la puissance de 0,8.
+Le risque $\alpha$ retenu sera de 0,05 & la puissance de 0,8. La seule donnée numérique (âge des patients) sera discrétisée. 
 
-Sauf indication contraires pour les tests simples les variables numériques seront comparées par un test de Student si possible ( effectifs suffisants, distribution normales (Test de Shapiro-Wilk), égalité des variances) auquel cas un test non paramétrique de Wilcoxon sera utilisé. Un test du $\chi^2$ de Pearson sera utilisé pour les variables discrètes sous réserve d'un effectif suffisant. À défaut un test exact de Fischer sera utilisé. Des graphiques seront réalisés pour les résultats importants (package `ggplot2` [@ggplot]).
+Toutes les données seront présentées par le nombre pour chaque classe de réponse avec le pourcentage. Pour les réponses en oui/non seuls les `oui` seront présentés.
+
+Sauf indication contraires pour les tests simples les variables numériques seront comparées par un test de Student si possible ( effectifs suffisants, distribution normales (Test de Shapiro-Wilk), égalité des variances) auquel cas un test non paramétrique de Wilcoxon sera utilisé. Un test du $\chi^2$ de Pearson sera utilisé pour les variables discrètes sous réserve d'un effectif suffisant. À défaut un test exact de Fischer sera utilisé. Un modèle de régression logistique a été employé. Ce modèle de régression a été limité aux facteurs associés à la réponse en utilisant les critères ayant une la réponse significative avec un seuil p.value = 0,2 lors de l’étape précédente. Une recherche du meilleur modèle a été réalisée par un step-by-step descendant évaluée par le critère d’information d’Akaike. Des graphiques seront réalisés pour les résultats importants ^[Package `ggplot2` [@ggplot]].
 
 ## Taille de l'échantillon
-
 
 ```{r}
 #| label: taille
@@ -47,9 +52,9 @@ Il s'agit d'une étude purement observationnelle sans test sur le critère princ
 
 ## Données manquantes
 
-Le décompte des données manquantes sera réalisé & présenté par un tableau ou un graphique. Les variables comportant trop de données manquantes ou non utilisables ne seront pas prises en compte après validation par le promoteur ainsi que les questionnaires très mal remplis (moins de 50 % des items remplis). Pour le motif de consultation si aucun n'est noté, on classera le cas dans *"Motif : Pas de diagnostic proposé". pour le diagnostic final en l'absence de réponse le cas sera éliminé.
+Le décompte des données manquantes sera réalisé & présenté par un tableau ou un graphique. Les variables comportant trop de données manquantes ou non utilisables ne seront pas prises en compte après validation par le promoteur ainsi que les questionnaires très mal remplis (moins de 50 % des items remplis). Pour le motif de consultation si aucun n'est noté, on classera le cas dans *"Motif : Pas de diagnostic proposé"*. pour le diagnostic final en l'absence de réponse le cas sera éliminé.
 
-Après ce premier tri une imputation des données manquantes (package `missMDA` [@miss]) sera réalisée uniquement pour l'analyse factorielle & pour la recherche du meilleur modèle par step-by-tep descendant pour les analyses par régression (logistique ou linéaire). Néanmoins pour cette analyse, après choix du modèle, le calcul final sera fait avec les données réelles. 
+Après ce premier tri une imputation des données manquantes ^[Package `missMDA` [@miss]] sera réalisée uniquement pour l'analyse factorielle & pour la recherche du meilleur modèle par step-by-tep descendant pour les analyses par régression (logistique ou linéaire). Néanmoins pour cette analyse, après choix du modèle, le calcul final sera fait avec les données réelles. 
 
 
 
@@ -57,36 +62,40 @@ Après ce premier tri une imputation des données manquantes (package `missMDA` 
 
 Ce chapitre ne concerne que la validation interne des deux questionnaires. 
 
-Une recherche de corrélation (package `corr` [@corr]) entre les variables sera réalisée. Si certaines variables se montreront trop corrélées elles devront être exclues de l'étude après accord du promoteur. 
+Une recherche de corrélation ^[Package `corr` [@corr]] entre les variables sera réalisée. Si certaines variables se montreront trop corrélées elles devront être exclues de l'étude après accord du promoteur. 
 
-Chaque questionnaire sera évalué après ces corrections par le test alpha de Cronbach (package `cronbach` [@cronb]). Un seuil d'environ 70 % sera retenu comme satisfaisant.
-
-
-### Analyse simple (Critère principal)
-
-La description de la population concerne :
-
-Un tableau présentera les valeurs démographiques & clinique pour l'ensemble de la population. Les valeurs, toutes discrètes, seront présentées en % avec son intervalle de confiance à 95 %. 
-
-le profil des patients sera résumé sur trois tableaux : Caractéristiques démographiques, motif de consultation & diagnostic final. Le parcours sera résumé sur trois tableaux : mode d'adressage, parcours avant la consulttaion & devenir immédiat après la consultation.
+Chaque questionnaire sera évalué après ces corrections par le test alpha de Cronbach ^[Package `cronbach` [@cronb]]. Un seuil d'environ 70 % sera retenu comme satisfaisant.
 
 
-### Analyse factorielle
+# Analyse simple (Critère principal)
 
-Si le nombre de cas recueillis le permet une analyse factorielle en Analyse de correspondances multiples (MCA -- package `FactoMineR` [@facto]) sera réalisée. 
+le profil des patients sera résumé sur plusieurs tableaux : 
 
+- caractéristiques démographiques
+- antécédents
+- motif de consultation
+- diagnostic final. 
+
+Le parcours sera résumé sur trois tableaux : 
+
+- mode d'adressage
+- parcours avant la consultation
+- devenir immédiat après la consultation.
+
+## Analyse factorielle
+
+Si le nombre de cas recueillis le permet une analyse factorielle en Analyse de correspondances multiples (MCA) sera réalisée^[package `FactoMineR` [@facto]]. 
 Cette analyse ne pourra être qu'après imputation des données manquantes ce qui n'est possible que si ces dernières ne sont pas trop nombreuses.
 
+# Objectifs secondaires
 
-## Objectifs secondaires
-
-### Objectif 1 
+## Objectif 1 (Questionnaire patient)
 *Analyser le rayonnement territorial de la consultation*
 
 
-Le département de résidence (question 3) sera décris par le nombre (avec le pourcentage) de cas. Une représentation graphique par carte sera réalisée.
+Le département de résidence (question 3) sera décris par le nombre (avec le pourcentage) de cas. Une représentation graphique par carte ^[Packages `sf`[@sf] & `mapsf`[@mapsf]] sera réalisée.
 
-### Objectif 1
+## Objectif 2 (Questionnaire généraliste)
 
 *Déterminer la proportion de médecins généralistes adresseurs et leur
 localisation*
@@ -103,31 +112,37 @@ La localisation de l'adresseur (question 6) sera décris par le nombre (avec le 
 
 Une présentation (tableau & carte) comparera l'adressage par le médecin traitant vs autre professionnel (questions 5 & 6) rapportée à la localisation.
 
-### Ojectif 3
+## Objectif 3 (Questionnaire patient)
 
 *Analyser la concordance entre le diagnostic d’adressage et le diagnostic posé à l’issue de la consultation*
 
-La concordance globale entre le diagnostic d'adressage (question 8) & le diagnostic final (question 15) sera appréciée par analyse simple et un test Kappa de Cohen. L'analyse par une matrice Q (package `dmTools`[@cmdt]) sera tentée. 
+La concordance globale entre le diagnostic d'adressage (question 8) & le diagnostic final (question 15) sera présenté par un tableau croisé motif d'envoi/Diagnostic final & par un tableau présentant pour chaque diagnostic final, le nombre & le pourcentage de concordance avec le motif d'envoi. Un tableau symétrique présentera pour chaque motif d'envoi les concordance avec le diagnostic final. Un test Kappa de Cohen sera réalisé pour avoir une évaluation chiffrée globale de la concordance.
 
-On regardera ensuite pour le diagnostic final, les cas où il y a le plus d'erreurs. Des graphiques pourront être tracés. 
 
-### Objectif 4
+## Objectif 4 (Questionnaire patient)
 
-*Analyser la réalité de l’urgence ayant motivé la consultation, via les questions 9, 10, 15 et 16 du questionnaire*
+*Analyser la réalité de l’urgence ayant motivé la consultation*
 
 Pour chacune de ces questions le promoteur définira les réponses considérée comme relevant de l'urgence. Ces réponses seront présentées en un tableau. 
 
 On regardera ensuite si les patients classés comme "urgents" avant (questions 9 & 10) correspondent aux cas pouvant être classés comme "urgents" après la consultation (questions 15 & 16) par un test kappa de Cohen.
 
+## Objectif 5 (Questionnaire patient)
+*Identifier des facteurs associés à la gravité des patients*
 
-*Identifier des facteurs associés à la gravité des patients *
+L'association éventuelle entre la gravité des patients définie par xxx & les signes cliniques sera présentée en analyse simple, monovariée & par un modèle de régression logistique. 
 
+## Objectif 6 (Questionnaire généraliste)
+*Identifier les besoins des médecins généralistes adresseurs*
 
+Les réponses aux questions seront présentées dans un tableau simple (nombre & pourcentage pour chaque item).
 
-## Technique {.appendix}
+\appendix 
+
+# Technique {.appendix}
 
 L'analyse statistique sera réalisée avec le logiciel **R**[@rstat] & divers packages. Outre ceux cités dans le texte ou utilisera en particulier `tidyverse` [@tidy] & `baseph` [@baseph].
 
 Un dépôt GitHub sera utilisé qui ne comprendra que le code & non les données ou résultats. Au besoin un faux tableau de données sera présenté pour permettre des tests.
 
-<https://github.com/philippemichel/TNF-VAX>
+<https://github.com/philippemichel/propice>

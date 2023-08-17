@@ -2,10 +2,6 @@
 subtitle: "Rapport Statistique"
 ---
 
-```{r setup, include=FALSE}
-
-```
-
 ```{r}
 #| label: lib
 
@@ -24,6 +20,8 @@ library(forestmodel)
 library(labelled)
 library(epiDisplay)
 library(visdat)
+library(sf)
+library(mapsf)
 #
 theme_gtsummary_language(language = "fr", decimal.mark = ",")
 options(OutDec = ",")
@@ -36,8 +34,8 @@ options(OutDec = ",")
 
 rm(ttpat)
 ttpat <- read_delim("datas/PROPICE_test.csv", delim = ";", show_col_types = FALSE, na = c("Non Applicable",""," ","NA")) |> 
-   mutate_if(is.character, as.factor) |>
-  janitor::clean_names()
+ mutate_if(is.character, as.factor) |>
+ janitor::clean_names()
 bn <- read_delim("datas/bnom.csv", delim = ";", show_col_types = FALSE)
 var_label(ttpat ) <- bn$titre
 ttpat <- ttpat |> 
@@ -50,25 +48,29 @@ var_label(ttpat$profsantnbr) <- "Nombre de professionnel consulté avant pour ce
 var_label(ttpat$departt) <- "Département du domicile"
 
 ## Recodage de tt$devenir
-ttpat$devenir <- ttpat$devenir %>%
- fct_recode(
-  "adressé en autre filière de soins" = " adressé en autre filière de soins, si oui préciser la filière",
-  "Revu en consultation post urgences" = " Revu en consultation post-urgences"
- )
 npat <- nrow(ttpat)
+
+## Recodage de ttpat$age en ttpat$age_rec
+ttpat <- ttpat |> 
+mutate(age2 = age)
+ttpat$age <- cut(ttpat$age,
+ include.lowest = TRUE,
+ right = FALSE,
+ dig.lab = 4,
+ breaks = c(0, 20, 30, 40, 50, 60, 70, 80, 90, 100, 120), 
+ labels = c("< 20", "20-29","30-39","40-49","50-59","60-69","70-79","80-89","90-99","100 et +")
+)
 ```
 
 ```{r}
 #| label: motifs
 
-mm <-  bn[16:23, ] |>
-  dplyr::select(titre) |>
-  mutate(titre = str_sub(titre, 9))
+mm <- bn[16:23,]
 
 zzm <- ttpat |>
-  dplyr::select(patid, starts_with("motif")) |>
-  pivot_longer(2:9) |>
-  mutate_all(as_factor)
+ dplyr::select(patid, starts_with("motif")) |>
+ pivot_longer(2:9) |>
+ mutate_all(as_factor)
 levels(zzm$name) <- mm$titre
 
 
@@ -77,23 +79,13 @@ levels(zzm$name) <- mm$titre
 ```{r}
 #| label: diags
 
-mmd <-  bn[42:50, ] |>
-  dplyr::select(titre) |>
-  mutate(titre = str_sub(titre, 14))
+mmd <- bn[42:50,]
 
 zzd <- ttpat |>
-  dplyr::select(patid, starts_with("diag")) |> 
-  pivot_longer(2:10) |> 
-  mutate_all(as_factor)
+ dplyr::select(patid, starts_with("diag")) |> 
+ pivot_longer(2:10) |> 
+ mutate_all(as_factor)
 levels(zzd$name) <- mmd$titre
-## Réordonnancement de zzd$name
-zzd$name <- zzd$name %>%
-  fct_relevel(
-    "Suspicion de K cutané ", "Exanthème / dermatose diffuse",
-    "Dermatoses inflammatoires", "Infections localisées", "Troubles trophiques des MI",
-    "Suspicion de MAI", "Tumeurs cutanées bénignes", "Divers ",
-    "Pas de diagnostic proposé"
-  )
 ```
 
 ## Données manquantes
@@ -102,7 +94,7 @@ zzd$name <- zzd$name %>%
 #| label: fig-manq-apt
 #| fig-cap: Données manquantes (questionnaire patient)
 
-vis_dat(ttpat , palette = "qual")
+vis_dat(ttpat, palette = "qual")
 ```
 
 
@@ -110,12 +102,14 @@ vis_dat(ttpat , palette = "qual")
 
 L'échantillon comporte `r nrow(ttpat)` cas pour `r ncol(ttpat)` variables.
 
-## Démographie
+## Profil du patient
+
+### Démographie
 
 
 ```{r}
 #| label: tbl-desc1
-#| tbl-cap: Tableau descriptif
+#| tbl-cap: Caractéristiques démographiques
 
 ttpat |>
  dplyr::select(2:5) |>
@@ -124,40 +118,20 @@ ttpat |>
  add_n() |>
  bold_labels() |>
  pexptabph(
-  lg = FALSE,
-  exp = expx,
-  nomfich = classeur,
-  nomsheet = "desc1"
+ lg = FALSE,
+ exp = expx,
+ nomfich = classeur,
+ nomsheet = "desc1"
  )
 ```
 
 ```{r}
 #| label: fig-pyr
 #| fig-cap: Pyramide des âges
-pyramid(ttpat$age,ttpat$sex, col.gender = c("pink", "lightblue"), binwidth = 10, main = "Pyramide des âges")
+pyramid(ttpat$age2,ttpat$sex, col.gender = c("pink", "lightblue"), binwidth = 10, main = "Pyramide des âges")
 ``` 
 
-## Adressage
-
-```{r}
-#| label: tbl-adress
-#| tbl-cap: Adressage du patient
-
-ttpat |>
- dplyr::select(6:7) |>
- tbl_summary(missing = "no") |>
- modify_header(label ~ " ") |>
- add_n() |>
- bold_labels() |>
- pexptabph(
-  lg = FALSE,
-  exp = expx,
-  nomfich = classeur,
-  nomsheet = "adress"
- )
-```
-
-## Antécédents
+### Antécédents
 
 ```{r}
 #| label: tbl-atcd
@@ -165,39 +139,38 @@ ttpat |>
 
 ttpat |>
  dplyr::select(starts_with("atcd")) |>
- tbl_summary(missing = "no") |>
+ tbl_summary(missing = "no", value = list(c(atcd_parturon,atcd_kon,atcd_ison) ~ "Oui")
+
+) |>
  modify_header(label ~ " ") |>
  add_n() |>
  bold_labels() |>
  pexptabph(
-  lg = FALSE,
-  exp = expx,
-  nomfich = classeur,
-  nomsheet = "atcd"
+ lg = FALSE,
+ exp = expx,
+ nomfich = classeur,
+ nomsheet = "atcd"
  )
 ```
 
-## Motif de la consultation
+### Motif de la consultation
 
 ```{r}
 #| label: tbl-motif
 #| tbl-cap: Motif de la consultation
-tbl_cross(
-  zzm,
-  name,
-  value,
-  percent = "row",
-  missing = "no",
-  margin = NULL,
-  label = list(name ~ "Motif", value ~ " ")
+ttpat |>
+ dplyr::select(starts_with("motif")) |>
+ tbl_summary(missing = "no", value = list(c(motif_kcuton,motif_exanthon, motif_dermaton,motif_infecton, motif_trbmion, motif_maion, motif_divon, motif_noon) ~ "Oui")
+
 ) |>
-  modify_header(label ~ "") |>
-  bold_labels() |> 
-   pexptabph(
-  lg = FALSE,
-  exp = expx,
-  nomfich = classeur,
-  nomsheet = "motif"
+ modify_header(label ~ " ") |>
+ add_n() |>
+ bold_labels() |>
+ pexptabph(
+ lg = FALSE,
+ exp = expx,
+ nomfich = classeur,
+ nomsheet = "atcd"
  )
 ```
 
@@ -208,180 +181,105 @@ tbl_cross(
 
 cg <- 'darkslategrey'
 zzm |>
-  dplyr::filter(value == "Oui") |>
-  count(name, .drop = FALSE) |> 
-  ggplot() +
-  aes(x = fct_reorder(name, n), y = n) +
-  scale_y_continuous(breaks  = 0:2) +
-  geom_segment(
-    aes(
-      x = fct_reorder(name, n),
-      xend = fct_reorder(name, n),
-      y = 0,
-      yend = n
-    ),
-    size = 1.5,
-    color = cg
-  ) +
-  geom_point(
-    size = 5,
-    shape = 21,
-    color = cg,
-    fill = "aquamarine3"
-  ) +
-  coord_flip() +
-  labs(
-    title = "Motif d'envoi",
-    subtitle = "",
-    x = "",
-    y = "n",
-    caption = "Motif d'envoi"
-  ) +
-  theme_light() +
-  colorspace::scale_fill_discrete_qualitative(palette = "Dark 3") +
-  theme(
-    plot.title = element_text(size = 16, face = "bold"),
-    plot.subtitle = element_text(size = 12),
-    axis.title.x = element_text(size = 12),
-    legend.title = element_text(size = 12),
-    axis.title.y = element_text(
-      size = 12,
-      angle = 0,
-      vjust = .5
-    ),
-    axis.text.x = element_text(size = 12),
-    axis.text.y = element_text(size = 12),
-    legend.position = "none"
-  )
+ dplyr::filter(value == "Oui") |>
+ count(name, .drop = FALSE) |> 
+ ggplot() +
+ aes(x = fct_reorder(name, n), y = n) +
+ scale_y_continuous(breaks = 0:2) +
+ geom_segment(
+ aes(
+ x = fct_reorder(name, n),
+ xend = fct_reorder(name, n),
+ y = 0,
+ yend = n
+ ),
+ size = 1.5,
+ color = cg
+ ) +
+ geom_point(
+ size = 5,
+ shape = 21,
+ color = cg,
+ fill = "aquamarine3"
+ ) +
+ coord_flip() +
+ labs(
+ title = "Motif d'envoi",
+ subtitle = "",
+ x = "",
+ y = "n",
+ caption = "Motif d'envoi"
+ ) +
+ theme_light() +
+ colorspace::scale_fill_discrete_qualitative(palette = "Dark 3") +
+ theme(
+ plot.title = element_text(size = 16, face = "bold"),
+ plot.subtitle = element_text(size = 12),
+ axis.title.x = element_text(size = 12),
+ legend.title = element_text(size = 12),
+ axis.title.y = element_text(
+ size = 12,
+ angle = 0,
+ vjust = .5
+ ),
+ axis.text.x = element_text(size = 12),
+ axis.text.y = element_text(size = 12),
+ legend.position = "none"
+ )
 ```
 
 
-## Clinique
+### Clinique
 
 ```{r}
 #| label: tbl-clinique
 #| tbl-cap: Tableau clinique
 
 ttpat |>
- dplyr::select(19:26) |> 
- tbl_summary(missing = "no") |>
+ dplyr::select(20:26) |> 
+ tbl_summary(missing = "no",
+ value = list(c(aggravon, pruriton, douleuron, handicapon, anxion, amon) ~ "Oui") )|>
  modify_header(label ~ " ") |>
  add_n() |>
  bold_labels() |>
  pexptabph(
-  lg = FALSE,
-  exp = expx,
-  nomfich = classeur,
-  nomsheet = "clinique"
+ lg = FALSE,
+ exp = expx,
+ nomfich = classeur,
+ nomsheet = "clinique"
  )
 ```
 
-## Professionnels consultés avant
-
-```{r}
-#| label: fig-nbprof
-#| fig-cap: Nombre de professionnel consultés avant pour ce motif
-
-ttpat |> 
-  drop_na(profsantnbr) |> 
-  count(profsantnbr) |> 
-  ggplot() +
-  aes(x = profsantnbr, y = n) +
-  scale_y_continuous(breaks  = 0:4) +
-  geom_segment(
-    aes(
-      x = profsantnbr,
-      xend = profsantnbr,
-      y = 0,
-      yend = n
-    ),
-    size = 1.5,
-    color = cg
-  ) +
-  geom_point(
-    size = 5,
-    shape = 21,
-    color = cg,
-    fill = "aquamarine3"
-  ) +
-  coord_flip() +
-  labs(
-    title = "Nombre de professionnel consultés avant \npour ce motif",
-    subtitle = "",
-    x = "",
-    y = "n",
-    caption = "Nombre de professionnel consultés avant pour ce motif"
-  ) +
-  theme_light() +
-  colorspace::scale_fill_discrete_qualitative(palette = "Dark 3") +
-  theme(
-    plot.title = element_text(size = 16, face = "bold"),
-    plot.subtitle = element_text(size = 12),
-    axis.title.x = element_text(size = 12),
-    legend.title = element_text(size = 12),
-    axis.title.y = element_text(
-      size = 12,
-      angle = 0,
-      vjust = .5
-    ),
-    axis.text.x = element_text(size = 12),
-    axis.text.y = element_text(size = 12),
-    legend.position = "none"
-  )
-```
-
-
-
-```{r}
-#| label: tbl-profav
-#| tbl-cap: Professionnels consultés avant
-
-zzprof <- ttpat |>
- dplyr::select(28:34) |> 
-pivot_longer(1:7) |> 
-  dplyr::filter(value == "Oui") |> 
-  count(name, .drop = TRUE) |> 
-  mutate(name = as.factor(name)) |> 
-  mutate(pp = round(100 * n/npat,1)) 
-## Réordonnancement de zzprof$name
-zzprof$name <- zzprof$name %>%
-  fct_relevel(
-    "medtraiton", "urghospiton", "urgautron", "dermatolon", "autrspeon",
-    "paramedon", "profautron"
-  )
-levels(zzprof$name) <- bn$titre[34:40]
-names(zzprof) <- c(" ", "n", "%")
-zzprof |> 
-  arrange(desc(n)) |> 
-kbl(booktabs = TRUE) |>
-  kable_styling(latex_options = c("HOLD_position"))
-```
-
-Certains patients ont consultés plusieurs professionnels avant ce qui explique le total supérieur à 100%.
-
-## Diagnostic final
+### Diagnostic final
 
 ```{r}
 #| label: tbl-diagfin
 #| tbl-cap: Diagnostic final
 
-
-tbl_cross(
-  zzd,
-  name,
-  value,
-  percent = "row",
-  missing = "no",
-  margin = NULL,
-  label = list(name ~ "Diagnostic final", value ~ " ")
-) |>
-  modify_header(label ~ "") |>
-  bold_labels() |> 
-   pexptabph(
-  lg = FALSE,
-  exp = expx,
-  nomfich = classeur,
-  nomsheet = "diagfin"
+ttpat |>
+ dplyr::select(starts_with("diag")) |>
+ tbl_summary(missing = "no",
+ value = list(
+ c(
+ diag_kcuton, 
+ diag_exanthon,
+ diag_dermaton, 
+ diag_infecton, 
+ diag_trbmion, 
+ diag_maion, 
+ diag_divon, 
+ diag_noon, 
+ diag_tumeuron
+ ) ~ "Oui"
+ )) |>
+ modify_header(label ~ " ") |>
+ add_n() |>
+ bold_labels() |>
+ pexptabph(
+ lg = FALSE,
+ exp = expx,
+ nomfich = classeur,
+ nomsheet = "clinique"
  )
 ```
 
@@ -391,54 +289,156 @@ tbl_cross(
 #| 
 cg <- 'darkslategrey'
 zzd |>
-  dplyr::filter(value == "Oui") |>
-  count(name, .drop = FALSE) |>
-  ggplot() +
-  aes(x = fct_reorder(name, n), y = n) +
-  scale_y_continuous(breaks  = 0:2) +
-  geom_segment(
-    aes(
-      x = fct_reorder(name, n),
-      xend = fct_reorder(name, n),
-      y = 0,
-      yend = n
-    ),
-    size = 1.5,
-    color = cg
-  ) +
-  geom_point(
-    size = 5,
-    shape = 21,
-    color = cg,
-    fill = "aquamarine3"
-  ) +
-  coord_flip() +
-  labs(
-    title = "Diagnostic final",
-    subtitle = "",
-    x = "",
-    y = "n",
-    caption = "Diagnostic final"
-  ) +
-  theme_light() +
-  colorspace::scale_fill_discrete_qualitative(palette = "Dark 3") +
-  theme(
-    plot.title = element_text(size = 16, face = "bold"),
-    plot.subtitle = element_text(size = 12),
-    axis.title.x = element_text(size = 12),
-    legend.title = element_text(size = 12),
-    axis.title.y = element_text(
-      size = 12,
-      angle = 0,
-      vjust = .5
-    ),
-    axis.text.x = element_text(size = 12),
-    axis.text.y = element_text(size = 12),
-    legend.position = "none"
-  )
+ dplyr::filter(value == "Oui") |>
+ count(name, .drop = FALSE) |>
+ ggplot() +
+ aes(x = fct_reorder(name, n), y = n) +
+ scale_y_continuous(breaks = 0:2) +
+ geom_segment(
+ aes(
+ x = fct_reorder(name, n),
+ xend = fct_reorder(name, n),
+ y = 0,
+ yend = n
+ ),
+ size = 1.5,
+ color = cg
+ ) +
+ geom_point(
+ size = 5,
+ shape = 21,
+ color = cg,
+ fill = "aquamarine3"
+ ) +
+ coord_flip() +
+ labs(
+ title = "Diagnostic final",
+ subtitle = "",
+ x = "",
+ y = "n",
+ caption = "Diagnostic final"
+ ) +
+ theme_light() +
+ colorspace::scale_fill_discrete_qualitative(palette = "Dark 3") +
+ theme(
+ plot.title = element_text(size = 16, face = "bold"),
+ plot.subtitle = element_text(size = 12),
+ axis.title.x = element_text(size = 12),
+ legend.title = element_text(size = 12),
+ axis.title.y = element_text(
+ size = 12,
+ angle = 0,
+ vjust = .5
+ ),
+ axis.text.x = element_text(size = 12),
+ axis.text.y = element_text(size = 12),
+ legend.position = "none"
+ )
 ```
 
-## Devenir
+
+## Parcours du patient
+
+### Adressage
+
+```{r}
+#| label: tbl-adress
+#| tbl-cap: Adressage du patient
+
+ttpat |>
+ dplyr::select(6:7) |>
+ tbl_summary(missing = "no", 
+ value = list(adresproon ~ "Oui") ) |>
+ modify_header(label ~ " ") |>
+ add_n() |>
+ bold_labels() |>
+ pexptabph(
+ lg = FALSE,
+ exp = expx,
+ nomfich = classeur,
+ nomsheet = "adress"
+ )
+```
+
+### Professionnels consultés avant
+
+```{r}
+#| label: tbl-profav
+#| tbl-cap: Professionnels consultés avant
+
+ttpat |>
+ dplyr::select(28:34) |>
+ tbl_summary(missing = "no", 
+ value = list(c(medtraiton, 
+urghospiton, urgautron, dermatolon, autrspeon, 
+paramedon, profautron) ~ "Oui") ) |>
+ modify_header(label ~ " ") |>
+ add_n() |>
+ bold_labels() |>
+ pexptabph(
+ lg = FALSE,
+ exp = expx,
+ nomfich = classeur,
+ nomsheet = "adress"
+ )
+```
+
+```{r}
+#| label: fig-nbprof
+#| fig-cap: Nombre de professionnel consultés avant pour ce motif
+
+ttpat |> 
+ drop_na(profsantnbr) |> 
+ count(profsantnbr) |> 
+ ggplot() +
+ aes(x = profsantnbr, y = n) +
+ scale_y_continuous(breaks = 0:4) +
+ geom_segment(
+ aes(
+ x = profsantnbr,
+ xend = profsantnbr,
+ y = 0,
+ yend = n
+ ),
+ size = 1.5,
+ color = cg
+ ) +
+ geom_point(
+ size = 5,
+ shape = 21,
+ color = cg,
+ fill = "aquamarine3"
+ ) +
+ coord_flip() +
+ labs(
+ title = "Nombre de professionnel consultés avant \npour ce motif",
+ subtitle = "",
+ x = "",
+ y = "n",
+ caption = "Nombre de professionnel consultés avant pour ce motif"
+ ) +
+ theme_light() +
+ colorspace::scale_fill_discrete_qualitative(palette = "Dark 3") +
+ theme(
+ plot.title = element_text(size = 16, face = "bold"),
+ plot.subtitle = element_text(size = 12),
+ axis.title.x = element_text(size = 12),
+ legend.title = element_text(size = 12),
+ axis.title.y = element_text(
+ size = 12,
+ angle = 0,
+ vjust = .5
+ ),
+ axis.text.x = element_text(size = 12),
+ axis.text.y = element_text(size = 12),
+ legend.position = "none"
+ )
+```
+
+Certains patients ont consultés plusieurs professionnels avant ce qui explique le total supérieur à 100%.
+
+
+### Devenir
 
 ```{r}
 #| label: tbl-devenir
@@ -451,10 +451,10 @@ ttpat |>
  add_n() |>
  bold_labels() |>
  pexptabph(
-  lg = FALSE,
-  exp = expx,
-  nomfich = classeur,
-  nomsheet = "devenir"
+ lg = FALSE,
+ exp = expx,
+ nomfich = classeur,
+ nomsheet = "devenir"
  )
 ```
 
@@ -475,25 +475,29 @@ ttpat |>
 #| label: tab-concor1
 #| tbl-cap: Motif d'envoi et diagnostic final
 
-zmm <-  zzm |> 
-  filter(value == "Oui")
-zdd <-  zzd |> 
-  filter(value == "Oui")
+zmmx <- zzm |> 
+ dplyr::filter(value == "Oui") |> 
+  dplyr::filter(name != "Divers")
 
-zzt <- left_join(zmm,zdd,"patid") |> 
-  dplyr::select(starts_with("name"))
+zzdx <- zzd |> 
+ dplyr::filter(value == "Oui") |> 
+dplyr::filter(name != "Divers" ) |> 
+  mutate(name = factor(name))
+
+zzt <- left_join(zmm,zzdx,"patid") |> 
+ dplyr::select(starts_with("name"))
 var_label(zzt) <- c("Motif d'envoi", "Diagnostic final")
 
 zzt |> 
-  tbl_cross(name.x,name.y) |> 
-  bold_labels() |> 
-   gexptabph(
-  lg = FALSE,
-  exp = expx,
-  nomfich = classeur,
-  nomsheet = "concord1"
+ tbl_cross(name.x,name.y) |> 
+ bold_labels() |> 
+ gexptabph(
+ lg = FALSE,
+ exp = expx,
+ nomfich = classeur,
+ nomsheet = "concord1"
  )
-  
+ 
 ```
 
 ```{r}
@@ -502,22 +506,22 @@ zzt |>
 tbconc <- NULL
 ztb <- table(zzt$name.x,zzt$name.y)
 for (i in (1:6)){
-  nn <- levels(zzt$name.x)[[i]]
-  tot <- colSums(ztb)[i] 
-  bon <- ztb[i,i]
-  bonp <- round(100*bon/tot,1)
-  lbon <- paste0(bon, "(",bonp," %)")
-  mauv <- tot - bon
-  mauvp <- round(100*mauv/tot,1)
-  lmauv <- paste0(mauv, "(",mauvp," %)")
-  ll <- c(nn,lbon,lmauv)
-  tbconc <- rbind(tbconc,ll)
+ nn <- levels(zzt$name.x)[[i]]
+ tot <- colSums(ztb)[i] 
+ bon <- ztb[i,i]
+ bonp <- round(100*bon/tot,1)
+ lbon <- paste0(bon, "(",bonp," %)")
+ mauv <- tot - bon
+ mauvp <- round(100*mauv/tot,1)
+ lmauv <- paste0(mauv, "(",mauvp," %)")
+ ll <- c(nn,lbon,lmauv)
+ tbconc <- rbind(tbconc,ll)
 }
 tbc <- as_tibble(tbconc)
 names(tbc) <- c("Diagnostic Final", "Concordance correcte", "Pas de concordance")
 kbl(tbc, booktabs = TRUE) |>
-  kable_styling(latex_options = c("HOLD_position"))
-  
+ kable_styling(latex_options = c("HOLD_position"))
+ 
 ```
 
 ```{r}
@@ -525,13 +529,13 @@ kbl(tbc, booktabs = TRUE) |>
 #| fig-cap: "Motif d'envoi et diagnostic final : concordance"
 
 heatmap(
-  ztb,
-  Rowv = NA,
-  Colv = NA,
-  margins = c(16, 16),
-  main = " Motif d’envoi et diagnostic final : concordance",
-  ylab = "Diagnostic final",
-  xlab = "Motif d'envoi"
+ ztb,
+ Rowv = NA,
+ Colv = NA,
+ margins = c(16, 16),
+ main = " Motif d’envoi et diagnostic final : concordance",
+ ylab = "Diagnostic final",
+ xlab = "Motif d'envoi"
 )
 ```
 
