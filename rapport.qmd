@@ -1,5 +1,5 @@
 ---
-subtitle: "Rapport Statistique"
+subtitle: "Rapport Statistique (faux)"
 ---
 
 ```{r}
@@ -16,12 +16,12 @@ library(gtsummary)
 library(kableExtra)
 library(lubridate)
 library(kableExtra)
-library(forestmodel)
 library(labelled)
 library(epiDisplay)
 library(visdat)
 library(sf)
 library(mapsf)
+library(colorspace)
 #
 theme_gtsummary_language(language = "fr", decimal.mark = ",")
 options(OutDec = ",")
@@ -58,7 +58,7 @@ ttpat$age <- cut(ttpat$age,
  right = FALSE,
  dig.lab = 4,
  breaks = c(0, 20, 30, 40, 50, 60, 70, 80, 90, 100, 120), 
- labels = c("< 20", "20-29","30-39","40-49","50-59","60-69","70-79","80-89","90-99","100 et +")
+ labels = c("< 20", "20 à 29","30 à 39","40 à 49","50 à 59","60 à 69","70 à 79","80 à 89","90 à 99","100 et +")
 )
 ```
 
@@ -463,8 +463,158 @@ ttpat |>
 ## Rayonnement territorial
 *Analyser le rayonnement territorial de la consultation (patient)*
 
+```{r}
+#| label: tab-patdep
+#| tbl-cap: Origine des patients
+
+ttpat |> 
+  dplyr::select(departt) |> 
+ tbl_summary(missing = "no", sort = list(everything()~ "frequency")) |>
+ modify_header(label ~ " ") |>
+ add_n() |>
+ bold_labels() |>
+ pexptabph(
+ lg = FALSE,
+ exp = expx,
+ nomfich = classeur,
+ nomsheet = "patdep"
+ )
+```
+
+
+```{r}
+#| label: fig-cartepat
+#| fig-cap: Département d'origine des patients
+#| 
+# Table des départements
+c95 <-  read_sf("CARTES/france-geojson-master/departements/95-val-d-oise/departement-95-val-d-oise.geojson")
+c60 <-  read_sf("CARTES/france-geojson-master/departements/60-oise/departement-60-oise.geojson")
+c78 <-  read_sf("CARTES/france-geojson-master/departements/78-yvelines/departement-78-yvelines.geojson")
+c27 <-  read_sf("CARTES/france-geojson-master/departements/27-eure/departement-27-eure.geojson")
+
+dep <- bind_rows(c95,c60) |> 
+  bind_rows(c78) |> 
+  bind_rows(c27)
+#
+depm <- ttpat |> 
+  dplyr::filter(departt %in% c(78,95,60,27)) |> 
+  count(departt) 
+names(depm)[1] <- "code"
+#
+depf <- left_join(dep,depm,"code")
+#
+# set a theme
+mf_theme("agolalight")
+# plot a shadow
+mf_shadow(depf)
+mf_map(depf, 
+       var = "n",
+       type = "choro",
+       breaks = "geom",
+       leg_pos = "bottomleft1",
+       lwd = 1,
+       leg_title = "Patients/ Département", 
+       add= TRUE
+       )
+mf_label(
+  x = depf,
+  var = "code",
+  col = "black",
+  cex = 2.5,
+  font = 2,
+  halo = TRUE,
+  bg = "white",
+  r = 0.1,
+  overlap = TRUE,
+  lines = TRUE
+)
+# layout
+mf_layout(
+  title = "Département d'origine des patients",
+  credits = "PROPICE 2023"
+  )
+mf_scale( col = "white")
+
+```
+
+
 ## Médecins généralistes adresseurs
 *Déterminer la proportion de médecins généralistes adresseurs et leur localisation (généraliste)*
+
+```{r}
+#| label: tbl-addep
+#| tbl-cap: Répartittion géographique des adresseurs
+
+comm <-read_delim("CARTES/inseepostal.csv", delim = ";") |> 
+  dplyr::select(1:3) |> 
+  janitor::clean_names() |> 
+  mutate(commune = str_replace_all(commune, "-", " ")) |> 
+  distinct(code_postal, .keep_all = TRUE)
+names(comm)[2] <- "adressmodecp"
+zzx <- ttpat |> 
+  dplyr::select(adressmodecp)
+inner_join(zzx,comm, by = "adressmodecp") |> 
+dplyr::select(commune) |> 
+ tbl_summary(missing = "no", sort = list(everything()~ "frequency")) |>
+ modify_header(label ~ " ") |>
+ add_n() |>
+ bold_labels() |>
+ pexptabph(
+ lg = FALSE,
+ exp = expx,
+ nomfich = classeur,
+ nomsheet = "mgdep"
+ )
+
+```
+
+
+```{r}
+#| label: fig-cartead
+#| fig-cap: Répartiton géographique des adresseurs
+
+# Table des départements
+c95 <-  read_sf("CARTES/france-geojson-master/departements/95-val-d-oise/communes-95-val-d-oise.geojson")
+c60 <-  read_sf("CARTES/france-geojson-master/departements/60-oise/communes-60-oise.geojson")
+c78 <-  read_sf("CARTES/france-geojson-master/departements/78-yvelines/communes-78-yvelines.geojson")
+c27 <-  read_sf("CARTES/france-geojson-master/departements/27-eure/communes-27-eure.geojson")
+
+dep <- bind_rows(c95,c60) |> 
+  bind_rows(c78) |> 
+  bind_rows(c27) 
+  
+#
+zz <- left_join(ttpat,comm,"adressmodecp")
+
+depm <- zz |> 
+  count(code_insee) 
+names(depm)[1] <- "code"
+#
+depf <- left_join(dep,depm,"code") |> 
+  mutate(n = as.double(n)) |> 
+  mutate(n = replace_na(n,0.0001))
+#
+# set a theme
+mf_theme("agolalight")
+# plot a shadow
+mf_shadow(depf)
+mf_map(depf, 
+       var = "n",
+       type = "choro",
+       breaks = "geom",
+       leg_pos = "bottomleft1",
+       lwd = 1,
+       leg_title = "Adresseurs/commune", 
+       add= TRUE
+       )
+# layout
+mf_layout(
+  title = "Répartition géographique des adresseurs",
+  credits = "PROPICE 2023"
+  )
+mf_scale( col = "white")
+
+```
 
 ## Concordance diagnostique
 *Analyser la concordance entre le diagnostic d’adressage et le diagnostic posé à l’issue de la consultation (patient)*
@@ -484,7 +634,7 @@ zzdx <- zzd |>
 dplyr::filter(name != "Divers" ) |> 
   mutate(name = factor(name))
 
-zzt <- left_join(zmm,zzdx,"patid") |> 
+zzt <- left_join(zmmx,zzdx,"patid") |> 
  dplyr::select(starts_with("name"))
 var_label(zzt) <- c("Motif d'envoi", "Diagnostic final")
 
