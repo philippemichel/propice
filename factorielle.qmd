@@ -1,0 +1,159 @@
+---
+subtitle: "Analyse factorielle"
+---
+```{r}
+#| label: lib
+
+rm(list = ls())
+expx <- FALSE
+classeur <- "propice1.xls"
+#
+library(baseph)
+library(janitor)
+library(tidyverse)
+library(gtsummary)
+library(kableExtra)
+library(lubridate)
+library(kableExtra)
+library(labelled)
+library(epiDisplay)
+library(visdat)
+library(sf)
+library(mapsf)
+library(colorspace)
+library(missMDA)
+library(FactoMineR)
+library(factoextra)
+#
+theme_gtsummary_language(language = "fr", decimal.mark = ",")
+options(OutDec = ",")
+```
+
+# Contrôle de l'échantillon
+
+```{r}
+#| label: import
+
+rm(ttpat, bn)
+bn <- read_delim("datas/bnom.csv", delim = ";", show_col_types = FALSE)
+ttpat <- read_delim("datas/PROPICE_BDD_gelee__txt_20230823_NCR.csv", delim = ";", show_col_types = FALSE, na = c("non applicable",""," ","NA", "Non disponible"))
+names(ttpat) <- bn$code
+
+ttpat <- ttpat |> 
+   mutate_if(is.character, as.factor) |>
+ janitor::clean_names() |> 
+ mutate(nb_de_professionnel = as.factor(nb_de_professionnel)) |> 
+ mutate(departement_domicile = as.factor(departement_domicile)) |> 
+ mutate(cp_adressant = as.factor(cp_adressant))
+ #
+npat <- nrow(ttpat)
+#
+## Recodage de ttpat$motif_adressage
+ttpat$motif_adressage <- ttpat$motif_adressage %>%
+  fct_recode(
+    "Dermatoses inflammatoires" = "Dermatoses inflammatoires (DA, Pso, Verneuil, urticaire, lichen...)",
+    "Exanthème / dermatose diffuse" = "Exanthème / dermatose diffuse (vriose, toxidermie)",
+    "infections localisées" = "infections localisées (teigne, dermatophytie, kyste, abcès érysipèle, lésion surinfectée, zona)",
+    NULL = "Non disponible",
+    "pas de diag proposé" = "pas de diag proposé (prurit etc)",
+    "Suspicion de MAI" = "Suspicion de MAI (lupus, pemphigoide, vascularite, syndrome de Sweet)"
+  )
+## Recodage de ttpat$motif_de_consultation
+ttpat$motif_de_consultation <- ttpat$motif_de_consultation %>%
+  fct_recode(
+    "Dermatoses inflammatoires" = "Dermatoses inflammatoires (DA, Pso, Verneuil...)",
+    "infections localisées" = "infections localisées (teigne, dermatophytie, kyste, abcès érysipèle, lésion surinfectée)",
+    "pas de diag proposé" = "pas de diag proposé (prurit etc)",
+    "Suspicion de MAI" = "Suspicion de MAI (lupus, pemphigoide)"
+  )
+## Réordonnancement de ttpat$atcd
+ttpat <- ttpat |> 
+  mutate(atcd =fct_relevel(atcd,
+    "enceinte", "K ou ATCD K", "prise IS", "aucun des 3 ATCD"
+  )) |> 
+mutate(duree_symptomes = cut(as.numeric(as.character(duree_symptomes)),
+  breaks = c(0, 7, 15, 30, 183, 365, 1e+05),
+  labels = c("< 7 j","8 à 15 jours","15 j à 1 mois", "1 à 6 mois", "6 à 12 mois", "> 1 an")
+))
+## Recodage de ttpat$age en ttpat$age_rec
+var_label(ttpat ) <- bn$nom
+ttpat <- ttpat |> 
+dplyr::select(!(2:4)) |> 
+  dplyr::select(!ends_with("txt")) |> 
+  mutate(age2 = age) |> 
+  mutate(age = cut(age,
+ include.lowest = TRUE,
+ right = FALSE,
+ dig.lab = 4,
+ breaks = c(0, 20, 40, 60,80,120), 
+ labels = c("< 20", "20 à 39","40 à 59","60 à 79","80 et +")
+)) |> 
+  ## Recodage de ttpat$suivi_du_patient en ttpat$Gravité
+mutate(gravite = 
+  fct_recode(suivi_du_patient,
+    "Grave" = "adressé autres fillières de soins",
+    "Grave" = "hospitalisation",
+    "Non Grave" = "Non revu",
+    "Grave" = "revu en cs post-urgence",
+    "Grave" = "revu en cs post-urgence+adressé autres fillières de soins"
+  )) |> 
+  drop_na(numero_patient)
+var_label(ttpat$gravite) <- "Gravité"
+```
+
+
+```{r}
+#| label: imput
+
+tti <- imputeMCA(ttpat[,-c(1,4,6,37,11,26)], 1)
+tti <- tti$completeObs
+tti <-  tti[, c(2,3,5:7,9:19,20:30,32)]
+```
+
+
+```{r}
+#| label: MCA
+
+mtt <- MCA(tti, quali.sup = 28, graph = FALSE)
+```
+
+# Qualité de la représentation
+
+
+```{r}
+#| label: fig-variance
+#| fig-cap: Qualité de la représentation
+
+fviz_screeplot(mtt, addlabels = TRUE, ylim = c(0, 10))
+```
+
+# Graphique des variables
+
+```{r}
+#| label: fig-var
+#| fig-cap: Graphique des variables
+
+fviz_mca_ind(mtt, geom = "point", habillage = "aggravation_recente", addEllipses = TRUE)
+```
+
+Graphiques des individus
+
+## Gravité
+
+```{r}
+#| label: fig-ind-grav
+#| fig-cap: graphique des individu - Gravité
+
+fviz_mca_ind(mtt, geom = "point", habillage = "gravite", addEllipses = TRUE)
+```
+
+\clearpage
+
+## Urgence
+
+```{r}
+#| label: fig-ind-urg
+#| fig-cap: graphique des individu - urgence
+
+fviz_mca_ind(mtt, geom = "point", habillage = "aggravation_recente", addEllipses = TRUE)
+```
