@@ -1,57 +1,893 @@
 ---
-title: ""
-subtitle: "Rapport"
-thanks: ""
-author: "Philippe MICHEL"
-format: pdf
-pdf-engine: lualatex
-documentclass: scrartcl
-mainfont: GillSans
-mainfontoptions:
-- Ligatures = Common
-- Ligatures = Rare
-sansfont: Source Sans Pro
-monofont: Source Sans Pro
-colorlinks: true
-fontsize: 11pt
-papersize: a4
-lang: fr
-fig-align: center
-toc: true
-lof: true
-lot: false
-cite-method: biblatex
-bibliography: stat.bib
-license: MIT
-always_allow_html: true
+subtitle: "Rapport Statistique v2.O"
+cache: false
 ---
-
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE, cache = FALSE) 
-```
 
 ```{r}
 #| label: lib
+
+rm(list = ls())
+expx <- TRUE
+classeur <- "propice2.xls"
+#
 library(baseph)
 library(janitor)
 library(tidyverse)
-library(lubridate)
+library(gtsummary)
 library(kableExtra)
-library(forestmodel)
+library(kableExtra)
+library(labelled)
+library(epiDisplay)
+library(visdat)
+library(sf)
+library(mapsf)
+library(colorspace)
+library(xlsx)
+#
+theme_gtsummary_language(language = "fr", decimal.mark = ",")
+options(OutDec = ",")
+```
+
+# Contrôle de l'échantillon
+
+```{r}
+#| label: import
+
+bn <-
+  read_delim("datas/bnom.csv",
+             delim = ";",
+             show_col_types = FALSE)
+#
+ttpat <- debutph("datas/PROPICE_BDD_gelee__txt_20230823_NCR.csv", nax = c("non applicable", "", " ", "NA", "Non disponible"))
+
+names(ttpat) <- bn$code
+
+ttpat <- ttpat |> 
+  clean_names() |> 
+  mutate(nb_de_professionnel = as.factor(nb_de_professionnel)) |>
+  mutate(departement_domicile = as.factor(departement_domicile)) |>
+  mutate(cp_adressant = as.factor(cp_adressant))
+#
+npat <- nrow(ttpat)
+#
+## Recodage de ttpat$motif_adressage
+ttpat$motif_adressage <- ttpat$motif_adressage %>%
+  fct_recode(
+    "Dermatoses inflammatoires" = "Dermatoses inflammatoires (DA, Pso, Verneuil, urticaire, lichen...)",
+    "Exanthème / dermatose diffuse" = "Exanthème / dermatose diffuse (vriose, toxidermie)",
+    "infections localisées" = "infections localisées (teigne, dermatophytie, kyste, abcès érysipèle, lésion surinfectée, zona)",
+    NULL = "Non disponible",
+    "pas de diag proposé" = "pas de diag proposé (prurit etc)",
+    "Suspicion de MAI" = "Suspicion de MAI (lupus, pemphigoide, vascularite, syndrome de Sweet)"
+  )
+## Recodage de ttpat$motif_de_consultation
+ttpat$motif_de_consultation <- ttpat$motif_de_consultation %>%
+  fct_recode(
+    "Dermatoses inflammatoires" = "Dermatoses inflammatoires (DA, Pso, Verneuil...)",
+    "infections localisées" = "infections localisées (teigne, dermatophytie, kyste, abcès érysipèle, lésion surinfectée)",
+    "pas de diag proposé" = "pas de diag proposé (prurit etc)",
+    "Suspicion de MAI" = "Suspicion de MAI (lupus, pemphigoide)"
+  )
+## Recodage de ttpat$suivi_du_patient en ttpat$suivi_du_patient_rec
+ttpat$suivi_du_patient <- ttpat$suivi_du_patient %>%
+  fct_recode("revu en cs post-urgence + autres fillières de soins" = "revu en cs post-urgence+adressé autres fillières de soins")
+## Réordonnancement de ttpat$atcd
+ttpat <- ttpat |>
+  mutate(atcd = fct_relevel(atcd,
+                            "aucun des 3 ATCD", "K ou ATCD K", "enceinte", "prise IS")) |>
+  mutate(duree_symptomes = cut(
+    as.numeric(as.character(duree_symptomes)),
+    breaks = c(0, 7, 15, 30, 183, 365, 1e+05),
+    labels = c("< 7 j", "8 à 15 jours", "15 j à 1 mois", "1 à 6 mois", "6 à 12 mois", "> 1 an")
+  ))
+## Recodage de ttpat$age en ttpat$age_rec
+var_label(ttpat) <- bn$nom
+ttpat <- ttpat |>
+  dplyr::select(!(2:4)) |>
+  dplyr::select(!ends_with("txt")) |>
+  mutate(age2 = age) |>
+  mutate(age = cut(
+    age,
+    include.lowest = TRUE,
+    right = FALSE,
+    dig.lab = 4,
+    breaks = c(0, 20, 40, 60, 80, 120),
+    labels = c("< 20", "20 à 39", "40 à 59", "60 à 79", "80 et +")
+  )) |>
+  ## Recodage de ttpat$suivi_du_patient en ttpat$Gravité
+  mutate(
+    gravite =
+      fct_recode(
+        suivi_du_patient,
+        "Grave" = "adressé autres fillières de soins",
+        "Grave" = "hospitalisation",
+        "Non Grave" = "Non revu",
+        "Grave" = "revu en cs post-urgence",
+        "Grave" = "revu en cs post-urgence + autres fillières de soins"
+      )
+  ) |>
+  drop_na(numero_patient)
+## Recodage de ttpat$suivi_du_patient
+ttpat$suivi_du_patient <- ttpat$suivi_du_patient %>%
+  fct_recode(
+    "revu en cs post urgence" = "revu en cs post-urgence",
+    "revu en cs post urgence + autres fillières de soins" = "revu en cs post-urgence + autres fillières de soins"
+  )
+var_label(ttpat$gravite) <- "Gravité"
 ```
 
 
-## Description de la population
+
+```{r}
+#| label: diags
+ttd <- ttpat
+ttd$diag_infection[c(81,226)] <- "non"
+diag <- ttd |> 
+  dplyr::select(starts_with("diag")) |>
+  pivot_longer(1:9) |> 
+  dplyr::filter(value == "oui") |> 
+  mutate(name = as.factor(name))
+levels(diag$name) <- c(
+  "Cancers cutanés et lésions pré cancéreuses",
+  "Divers",
+  "Exanthème / dermatose diffuse",
+  "Infections localisées",
+  "Dermatose inflammatoire",
+  "MAI",
+  "Pas de diagnostic",
+  "Tb trophique des MI",
+  "Tumeurs bénignes cutanées"
+)
+names(diag)[1] <- "Diagnostic final"
+rm(ttd)
+```
+
+```{r}
+#| label: prof
+#| 
+prof <- ttpat |> 
+  dplyr::select(starts_with("profess")) |> 
+  pivot_longer(1:7) |> 
+  dplyr::filter(value == "oui") |> 
+  mutate(name = as.factor(name))
+levels(prof$name) <- c(
+  "Autres médecins",
+  "Autres urgences",
+  "Dermatologues libéraux",
+  "Médecin traitant",
+  "Paramédicale",
+"Urgences hôpital Pontoise"
+)
+```
 
 
-L'échantillon comporte `r ` cas.
+## Données manquantes
+
+```{r}
+#| label: fig-manq-apt
+#| fig-cap: Données manquantes (questionnaire patient)
+
+vis_dat(ttpat, palette = "qual")
+
+```
+
+# Description de la population
+
+L'étude ne porte que sur le questionnaire *patient*.
+
+L'échantillon comporte `r nrow(ttpat)` cas pour `r ncol(ttpat)` variables.
+
+## Profil du patient
+
+### Démographie
+
+
+```{r}
+#| label: tbl-desc1
+#| tbl-cap: Caractéristiques démographiques
+
+ttpat |>
+ dplyr::select(2:5) |>
+ tbl_summary(missing = "no") |>
+ modify_header(label ~ " ") |>
+ add_n() |>
+ bold_labels() |>
+ pexptabph(
+ lg = FALSE,
+ exp = expx,
+ nomfich = classeur,
+ nomsheet = "desc1"
+ )
+```
+
+```{r}
+#| label: fig-pyr
+#| fig-cap: Pyramide des âges
+pyramid(ttpat$age2,ttpat$sexe, col.gender = c("pink", "lightblue"), binwidth = 10, main = "Pyramide des âges")
+``` 
+
+### Antécédents
+
+```{r}
+#| label: tbl-atcd
+#| tbl-cap: Antécédents du patient
+
+ttpat |>
+ dplyr::select(starts_with("atcd")) |>
+ tbl_summary(missing = "no") |>
+ modify_header(label ~ " ") |>
+ add_n() |>
+ bold_labels() |>
+ pexptabph(
+ lg = FALSE,
+ exp = expx,
+ nomfich = classeur,
+ nomsheet = "atcd"
+ )
+```
+
+### Adressage
+
+```{r}
+#| label: tbl-motif
+#| tbl-cap: Motif de l'adressage
+ttpat |>
+  dplyr::select(motif_adressage) |>
+  tbl_summary(missing = "no",
+              sort = list(everything() ~ "frequency")) |>
+  modify_header(label ~ " ") |>
+  add_n() |>
+  bold_labels() |>
+  pexptabph(
+    lg = FALSE,
+    exp = expx,
+    nomfich = classeur,
+    nomsheet = "mot_ad"
+  )
+```
+
+```{r}
+#| label: fig-motif
+#| fig-cap: Motif de l'adressage
+lollipph(ttpat,motif_adressage, titre = "Motif d'adressage")
+
+```
+
+### Patient auto-adressés
+
+```{r}
+#| label: tbl-motcons
+#| tbl-cap: Motif de la consultation (patients venu d'eux-même)
+ttpat |>
+  dplyr::select(motif_de_consultation) |>
+  tbl_summary(missing = "no",
+              sort = list(everything() ~ "frequency")) |>
+  modify_header(label ~ " ") |>
+  add_n() |>
+  bold_labels() |>
+  pexptabph(
+    lg = FALSE,
+    exp = expx,
+    nomfich = classeur,
+    nomsheet = "mot_cns"
+  )
+```
+
+```{r}
+#| label: fig-consult
+#| fig-cap: Motif de la consultation (patients venu d'eux-même)
+lollipph(ttpat,motif_de_consultation, titre = "Motif de la consultation", capt = "Motif de la consultation (patients venu d'eux-même)")
+
+```
+
+### Clinique
+
+```{r}
+#| label: tbl-clinique
+#| tbl-cap: Tableau clinique 
+
+ttpat |>
+ dplyr::select(duree_symptomes, aggravation_recente,starts_with("symptomes_"), arret_travail) |> 
+ tbl_summary(missing = "no",
+ value = list(c(aggravation_recente,symptomes_prurit, symptomes_douleur, symptomes_handicap_moteur,symptomes_handicap_moteur, symptomes_anxiete, arret_travail) ~ "oui") ) |>
+ modify_header(label ~ " ") |>
+ add_n() |>
+ bold_labels() |>
+ pexptabph(
+ lg = FALSE,
+ exp = expx,
+ nomfich = classeur,
+ nomsheet = "clinique"
+ )
+```
+
+### Diagnostic final
+
+```{r}
+#| label: tbl-diagfin
+#| tbl-cap: Diagnostic final
+
+diag |>
+  dplyr::select(`Diagnostic final`) |> 
+  tbl_summary(missing = "no",
+              ,
+              sort = list(everything() ~ "frequency")) |>
+  modify_header(label ~ "") |>
+  add_n() |>
+  bold_labels() |>
+  pexptabph(
+    lg = FALSE,
+    exp = expx,
+    nomfich = classeur,
+    nomsheet = "diag_final"
+  )
+```
+
+```{r}
+#| label: fig-diag
+#| fig-cap: Diagnostic final
+#| 
+lollipph(diag, `Diagnostic final`, titre = "Diagnostic final")
+```
+
+À noter que deux patients ont eu deux diagnostics retenus : 
+
+- Patient 81 : infection & trouble trophique des MI
+- Patient 226 : exanthème & infection
+
+
+## Parcours du patient
+
+### Mode d'adressage
+
+```{r}
+#| label: tbl-adress
+#| tbl-cap: Adressage du patient
+
+ttpat |>
+  dplyr::select(mode_adressage) |>
+  tbl_summary(missing = "no",
+              sort = list(everything() ~ "frequency")) |>
+  modify_header(label ~ " ") |>
+  add_n() |>
+  bold_labels() |>
+  pexptabph(
+    lg = FALSE,
+    exp = expx,
+    nomfich = classeur,
+    nomsheet = "adress"
+  )
+```
+
+
+```{r}
+#| label: fig-adress
+#| fig-cap: Adressage du patient
+#| 
+lollipph(ttpat, mode_adressage, tri = "Médecin traitant ", titre = "Mode d'adresage du patient")
+```
+
+### Professionnels consultés avant
+
+```{r}
+#| label: tbl-profav
+#| tbl-cap: Professionnels consultés avant
+
+ttpat |>
+ dplyr::select(starts_with("professionnels_")) |>
+ tbl_summary(missing = "no",
+ value = list(c(professionnels_medecin_traitant,    
+professionnels_urgences_hopital_pontoise,
+professionnels_autres_urgences,       
+professionnels_dermatologues_liberaux,
+professionnels_autres_medecins,    
+professionnels_paramedicale,           
+professionnels_autre
+) ~ "oui") ) |>
+ modify_header(label ~ " ") |>
+ add_n() |>
+ bold_labels() |>
+ pexptabph(
+ lg = FALSE,
+ exp = expx,
+ nomfich = classeur,
+ nomsheet = "consult_av"
+ )
+```
+
+
+Certains patients ont consultés plusieurs professionnels avant ce qui explique le total supérieur à 100%.
+
+```{r}
+#| label: tbl-nb_prof_av
+#| tbl-cap: Nombre de professionnels consultés avant 
+
+ttpat |>
+ dplyr::select(nb_de_professionnel) |> 
+ tbl_summary(missing = "no") |>
+ modify_header(label ~ " ") |>
+ add_n() |>
+ bold_labels() |>
+ pexptabph(
+ lg = FALSE,
+ exp = expx,
+ nomfich = classeur,
+ nomsheet = "nb_prof_av"
+ )
+```
+
+
+```{r}
+#| label: fig-nbprof
+#| fig-cap: Nombre de professionnel consultés avant pour ce motif
+
+lollipph(ttpat, nb_de_professionnel,  ,titre = "Professionnels consultés avant")
+```
+
+\clearpage
+
+### Devenir
+
+```{r}
+#| label: tbl-devenir
+#| tbl-cap: Devenir du patient 
+
+ttpat |>
+ dplyr::select(suivi_du_patient) |> 
+ tbl_summary(missing = "no", sort = list(everything()~ "frequency")) |>
+ modify_header(label ~ " ") |>
+ add_n() |>
+ bold_labels() |>
+ pexptabph(
+ lg = FALSE,
+ exp = expx,
+ nomfich = classeur,
+ nomsheet = "devenir"
+ )
+```
+
+```{r}
+#| label: fig-suivi
+#| fig-cap: Devenir des patients
+
+lollipph(ttpat, suivi_du_patient, tri = "Non revu", titre = "Devenir du patient", capt = "Devenir du patient après la consultation de dermatologie d'urgence")
+```
+# Critères secondaires
+
+## Rayonnement territorial
+*Analyser le rayonnement territorial de la consultation*
+
+```{r}
+#| label: tab-patdep
+#| tbl-cap: Origine des patients
+
+ttpat |> 
+  dplyr::select(departement_domicile) |> 
+ tbl_summary(missing = "no", sort = list(everything()~ "frequency")) |>
+ modify_header(label ~ " ") |>
+ add_n() |>
+ bold_labels() |>
+ pexptabph(
+ lg = FALSE,
+ exp = expx,
+ nomfich = classeur,
+ nomsheet = "patdep"
+ )
+```
+
+
+```{r}
+#| label: fig-cartepat
+#| fig-cap: Département d'origine des patients
+#| eval: true
+#| 
+# Table des départements
+
+
+pal <- hcl.colors(n = 5, palette = "Terrain")
+
+c95 <-  read_sf("CARTES/france-geojson-master/departements/95-val-d-oise/departement-95-val-d-oise.geojson")
+c60 <-  read_sf("CARTES/france-geojson-master/departements/60-oise/departement-60-oise.geojson")
+c78 <-  read_sf("CARTES/france-geojson-master/departements/78-yvelines/departement-78-yvelines.geojson")
+c27 <-  read_sf("CARTES/france-geojson-master/departements/27-eure/departement-27-eure.geojson") 
+c92  <- read_sf("CARTES/france-geojson-master/departements/92-hauts-de-seine/departement-92-hauts-de-seine.geojson") 
+
+dep <- bind_rows(c95,c60) |> 
+  bind_rows(c78) |> 
+  bind_rows(c27) |> 
+  bind_rows(c92)
+#
+depm <- ttpat |> 
+ # dplyr::filter(departement_domicile %in% c(78,95,60,27)) |> 
+  count(departement_domicile) 
+names(depm)[1] <- "code"
+#
+depf <- left_join(dep,depm,"code")
+#
+# set a theme
+mf_theme("default")
+# plot a shadow
+mf_shadow(depf)
+mf_map(depf, 
+       var = "n",
+       type = "choro",
+       breaks = c(0,10,15,100,300),
+       leg_pos = "bottomright",
+       cex = 0.1,
+       pal = pal,
+       lwd = 1,
+       leg_title = "Patients/ Département", 
+       add= TRUE
+       )
+mf_label(
+  x = depf,
+  var = "code",
+  col = "black",
+  cex = 2.5,
+  font = 2,
+  halo = FALSE,
+  bg = "grey50",
+  r = 0.1,
+  overlap = TRUE,
+  lines = TRUE
+)
+# layout
+mf_layout(
+  title = "Département d'origine des patients",
+  credits = "PROPICE 2023",
+    scale = FALSE
+  )
+
+
+```
+\clearpage
+
+## Médecins généralistes adresseurs
+
+```{r}
+#| label: tbl-mg
+#| tbl-cap: "Adresseurs : médecins généralistes"
+
+ttpat |> 
+  mutate(Adresseur = if_else(mode_adressage == "Médecin traitant ", "Généraliste", "Autre")) |> 
+          dplyr::select(Adresseur) |> 
+      tbl_summary(missing = "no", sort = list(everything()~ "frequency")) |>
+ modify_header(label ~ " ") |>
+ bold_labels() |>
+ pexptabph(
+ lg = FALSE,
+ exp = expx,
+ nomfich = classeur,
+ nomsheet = "mg"
+ )
+```
+
+
+## Répartittion géographique des adresseurs
+
+```{r}
+#| label: tbl-addep
+#| tbl-cap: Répartittion géographique des adresseurs
+#| eval: true
+
+comm <-read_delim("CARTES/inseepostal.csv", delim = ";") |> 
+  dplyr::select(1:3) |> 
+  janitor::clean_names() |> 
+  mutate(commune = str_replace_all(commune, "-", " ")) |> 
+  distinct(code_postal, .keep_all = TRUE) |> 
+  mutate(code_postal = as.character(code_postal))
+comm$commune[c(3422,5525,5495,3997)] <- "CERGY PONTOISE"
+names(comm)[2] <- "cp_adressant"
+zzx <- ttpat |> 
+  mutate(cp_adressant =fct_lump_n(cp_adressant,10, other_level = "Autres")) |> 
+  dplyr::select(cp_adressant)
+inner_join(zzx,comm, by = "cp_adressant") |> 
+  drop_na(cp_adressant) |> 
+dplyr::select(commune) |> 
+ tbl_summary(missing = "no", sort = list(everything()~ "frequency")) |>
+ modify_header(label ~ " ") |>
+ add_n() |>
+ bold_labels() |>
+ pexptabph(
+ lg = FALSE,
+ exp = expx,
+ nomfich = classeur,
+ nomsheet = "mgdep"
+ )
+
+```
+
+
+```{r}
+#| label: fig-cartead
+#| fig-cap: Répartition géographique des adresseurs
+#| eval: true
+
+# Table des départements
+c95 <-  read_sf("CARTES/france-geojson-master/departements/95-val-d-oise/communes-95-val-d-oise.geojson")
+c60 <-  read_sf("CARTES/france-geojson-master/departements/60-oise/communes-60-oise.geojson")
+c78 <-  read_sf("CARTES/france-geojson-master/departements/78-yvelines/communes-78-yvelines.geojson")
+c27 <-  read_sf("CARTES/france-geojson-master/departements/27-eure/communes-27-eure.geojson")
+c92 <-  read_sf("CARTES/france-geojson-master/departements/92-hauts-de-seine/communes-92-hauts-de-seine.geojson") 
+
+dep <- bind_rows(c95,c60) |> 
+  bind_rows(c78) |> 
+  bind_rows(c27) |> 
+  bind_rows(c92)
+  
+#
+zz <- ttpat |> 
+  drop_na(cp_adressant) |> 
+left_join(comm,"cp_adressant")
+
+depm <- zz |> 
+  count(code_insee) 
+names(depm)[1] <- "code"
+#
+depf <- left_join(dep,depm,"code") |> 
+  mutate(n = as.double(n)) |> 
+  mutate(n = replace_na(n,0.0001)) |> 
+  mutate(dpt = as.numeric(str_sub(code,0,2)))
+#
+# set a theme
+mf_theme("default")
+mf_shadow(depf)
+mf_map(depf, 
+       var = "dpt",
+       pal = pal,
+       type = "choro",
+       breaks = "27,78,92,95",
+       add= TRUE,
+       leg_pos = NA
+       )
+mf_map(depf, 
+       var = "n",
+       type = "prop",
+       col = "brown2",
+       leg_pos = "bottomright",
+       lwd = 1,
+       leg_title = "Adresseurs/commune", 
+       add= TRUE,
+)
+# layout
+mf_layout(
+  title = "Répartition géographique des adresseurs",
+  credits = "PROPICE 2023", 
+  scale = FALSE
+  )
+
+```
+
+\clearpage
+
+## Concordance diagnostique
+*Analyser la concordance entre le diagnostic d’adressage et le diagnostic posé à l’issue de la consultation*
 
 
 
+```{r}
+#| label: tab-concor1
+#| tbl-cap: Motif d'envoi et diagnostic final
 
 
-## Technique
-Les données démographiques on été décrites par la médiane & les quartiles pour les données numériques, en pourcentage pour les données catégorielles. Les intervalles de confiance ont été calculés par bootstrap.
-Pour le critère principal la comparaison des deux groupes a été réalisée par un test de Wilcoxon sur séries appariées. La recherche de facteurs prédictifs a été réalisée par des test ANOVA. Vu le grand nombre de tests la limite de significabilité a été définie à 0,01.
+tabx <- ttpat |>
+  dplyr::filter(motif_adressage != "Divers") |>
+  dplyr::filter(motif_adressage != "pas de diag proposé") |>
+  mutate(motif_adressage = factor(motif_adressage)) |>
+  mutate(
+    motif_adressage = fct_relevel(
+      motif_adressage,
+      "Suspicion de K cutané",
+      "Exanthème / dermatose diffuse",
+      "infections localisées",
+      "Dermatoses inflammatoires",
+      "Suspicion de MAI",
+      "Tb trophiques des MI"
+    )
+  ) |>
+  dplyr::select(motif_adressage, 27:33, 36) |>
+  pivot_longer(2:9) |>
+  dplyr::filter(value == "oui") |>
+  mutate(name = str_sub(name, start = 6)) |>
+  mutate(name = str_replace_all(name, "_", " ")) |>
+  drop_na(motif_adressage)
 
-L'analyse statistique a été réalisée grâce au logiciel **R**[@rstat] & à divers packages en particulier `tidyverse`[@tidy], `FactoMineR`[@facto] & `epiDisplay`[@epid].
+tabx |>
+  tbl_cross(motif_adressage, 
+            name,
+            percent = "row",
+            margin = "column",
+            label = list(name ~ "Diagnostic final")) |>
+  bold_labels() |>
+  as_kable_extra(booktabs = TRUE) |>
+  kable_styling(latex_options = c("scale_down", "HOLD_position"))
+
+if (expx) {
+  tabx |>
+    as_tibble() |>
+    write.xlsx(classeur, sheetName = "concord", append = TRUE)
+}
+```
+
+
+```{r}
+#| label: fig-conc1
+#| fig-cap: "Motif d'envoi et diagnostic final : concordance"
+
+heatmap(
+ table(diag$`Diagnostic final`,ttpat$motif_adressage),
+ Rowv = NA,
+ Colv = NA,
+ margins = c(16, 16),
+ main = " Motif d’envoi et diagnostic final : concordance",
+ ylab = "Diagnostic final",
+ xlab = "Motif d'envoi"
+)
+```
+
+
+### Concordance diagnostique : score KAPPA
+
+```{r}
+#| label: tbl-conckap
+#| tbl-cap: "Motif d'envoi et diagnostic final : Score kappa"
+
+mm <- c("Suspicion de K cutané","Exanthème / dermatose diffuse","Dermatoses inflammatoires", "infections localisées" , "Tb trophiques des MI", "Suspicion de MAI")
+tabx <- NULL
+for (i in 1:6){
+  diagx <- ttpat |> 
+    dplyr::select(starts_with("diag"))
+  mms <- ifelse(ttpat$motif_adressage == mm[i], "Suspecté", "Non suspecté")
+  ktab <- kap(table(mms,diagx[[i]]))
+  nnk <-  str_sub(bn$code[i+33],start = 6)
+  ll <- c(nnk, paste0(round(ktab$po*100,1)," %"), round(ktab$kappa*100,1),ktab$kappa*100)
+  tabx <- rbind(tabx,ll)
+}
+tabx <- as_tibble(tabx) |> 
+  mutate(nkp = as.numeric(str_sub(V4,0,2))) |> 
+  mutate(cci = cut(nkp,breaks = c(0,40,60,80,90,100), c("Minimale", "Faible", "Modérée" ,"Forte", "Presque parfaite"))) |> 
+  dplyr::select(!c(nkp, V4))
+names(tabx) <- c(" ","% concordance", "Score Kappa","Concordance")
+tabx |> 
+    kbl(booktabs = TRUE) |> 
+    kable_styling(latex_options = c("scale_down","HOLD_position"))
+    if (expx) {
+      tabx |>
+        as_tibble() |>
+        write.xlsx(classeur, sheetName = kappa, append = TRUE)
+    }
+```
+
+\clearpage
+
+## Réalité de l’urgence
+*Analyser la réalité de l’urgence ayant motivé la consultation*
+
+La réalité de l'urgence est définie par une aggravation dans le cinq jours précédant la consultation. 
+
+```{r}
+#| label: tbl-urg1
+#| tbl-cap: Réalité de l'urgence
+
+ttpat |> 
+  dplyr::select(aggravation_recente) |> 
+  tbl_summary(missing = "no") |> 
+   modify_header(label ~ " ") |>
+ add_n() |>
+ bold_labels() |>
+ pexptabph(
+ lg = FALSE,
+ exp = expx,
+ nomfich = classeur,
+ nomsheet = "urg1"
+ )
+```
+
+
+
+## facteurs associés
+*Identifier des facteurs associés à la gravité des patients* 
+
+Le cas est défini comme *grave* s'il est adressé à une structure de soin. 
+```{r}
+#| label: tbl-grav1
+#| tbl-cap: Gravité du cas
+
+ttpat |> 
+  dplyr::select(gravite) |> 
+  tbl_summary(missing = "no") |> 
+   modify_header(label ~ " ") |>
+ add_n() |>
+ bold_labels() |>
+ pexptabph(
+ lg = FALSE,
+ exp = expx,
+ nomfich = classeur,
+ nomsheet = "grav1"
+ )
+```
+
+```{r}
+#| label: tbl-grav2
+#| tbl-cap: Gravité - facteurs de risque
+
+ttpat |> 
+  dplyr::select(2,3,9:18,gravite) |> 
+  tbl_summary(missing = "no", by = gravite) |> 
+   modify_header(label ~ " ") |>
+ add_n() |>
+  add_p(test = everything() ~"fisher.test") |> 
+ bold_labels() |>
+ gexptabph(
+ lg = FALSE,
+ exp = expx,
+ nomfich = classeur,
+ nomsheet = "grav2"
+ )
+```
+
+```{r}
+#| label: tbl-reg-grav
+#| tbl-cap: Gravité des cas - facteurs de risque analyse multivariée
+
+ll <- glm(gravite ~ age +atcd+  motif_adressage + aggravation_recente + symptomes_handicap_moteur, data = ttpat, family = "binomial")
+
+tbl_regression(ll, exponentiate = TRUE) |> 
+   bold_labels() |>
+ pexptabph(
+ lg = FALSE,
+ exp = expx,
+ nomfich = classeur,
+ nomsheet = "gravmulti"
+ )
+```
+
+```{r}
+#| label: fig-grave_age
+#| fig-cap: "Gravité selon l'âge"
+
+barouiph(ttpat, gravite, age, "Grave", titre =" % de patients grave selon l'âge", stitre = "p < 0,001", titx = "ans")
+```
+
+```{r}
+#| label: tbl-grav_urg
+#| tbl-cap: Gravité & ancienneté des symptômes 
+
+ttpat |> 
+  drop_na(duree_symptomes) |> 
+  tbl_cross(gravite, duree_symptomes,
+           percent = c("column"),
+           margin = "column") |> 
+     bold_labels() |>
+ gexptabph(
+ lg = FALSE,
+ exp = expx,
+ nomfich = classeur,
+ nomsheet = "grav_duree"
+ )
+
+```
+
+```{r}
+#| label: fig-grav_urg
+#| fig-cap: Gravité & ancienneté des symptômes 
+
+zz <- chisq.test(ttpat$gravite,ttpat$duree_symptomes)
+zzp <- " p < 0,001"
+
+barouiph(ttpat,gravite, duree_symptomes, "Grave", titre = "Cas graves selon l'ancienneté des symptômes", stitre = zzp)
+```
+
+
+
+# Technique
+
+Le risque $\alpha$ retenu a été de 0,05 & la puissance de 0,8. La seule donnée numérique (âge des patients) a été discrétisée. 
+
+Toutes les données ont été présentées par le nombre pour chaque classe de réponse avec le pourcentage. Pour les réponses en oui/non seuls les `oui` ont été présentés.
+
+Sauf indication contraires pour les tests simples un test du $\chi^2$ de Pearson a été utilisé sous réserve d'un effectif suffisant. À défaut un test exact de Fischer a été utilisé. Un modèle de régression logistique a été employé. Ce modèle de régression a été limité aux facteurs associés à la réponse en utilisant les critères ayant une la réponse significative avec un seuil p.value = 0,2 lors de l’étape précédente. Une recherche du meilleur modèle a été réalisée par un step-by-step descendant évaluée par le critère d’information d’Akaike. Des graphiques ont été réalisés pour les résultats importants.
+
+L'analyse statistique a été réalisée grâce au logiciel **R**[@rstat] & à divers packages en particulier `tidyverse`[@tidy] & `baseph`[@baseph].
+
+

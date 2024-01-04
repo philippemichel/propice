@@ -13,7 +13,8 @@ format:
   logo-space-after: "0\\baselineskip"
   documentclass: scrreprt
   number-sections: true
-  titlepage-footer: "Manon GAUTIER  \\newline Dr Edouard BEGON \\newline Service  Service de Dermatologie -- Hôpital NOVO (Site Pontoise)\\newline Chef de projet : Mme Véronique DA COSTA\\newline \\newline Profil et parcours de soins des patients consultant aux urgences dermatologiques de
+  titlepage-footer: "Manon GAUTIER  \\newline Dr Edouard BEGON \\newline Service  Service de Dermatologie -- Hôpital NOVO (Site Pontoise)\\newline Chef de projet : Mme Lynda BENAMMAR
+\\newline \\newline Profil et parcours de soins des patients consultant aux urgences dermatologiques de
 l’Hôpital NOVO - site de Pontoise  \\newline Étude monocentrique \\newline \\today"
 titlepage-theme:
   title-fontstyle: ["Huge", "bfseries"]
