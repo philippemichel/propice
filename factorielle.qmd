@@ -133,7 +133,7 @@ fviz_screeplot(mtt, addlabels = TRUE, ylim = c(0, 10))
 #| label: fig-var
 #| fig-cap: Graphique des variables
 
-fviz_mca_ind(mtt, geom = "point", habillage = "aggravation_recente", addEllipses = TRUE)
+fviz_mca_var(mtt, repel = TRUE, select.var = list(cos2=10), col.var = "contrib")
 ```
 
 Graphiques des individus

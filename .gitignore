@@ -32,6 +32,10 @@ vignettes/*.pdf
 *.html
 *.Rproj
 *.csl
+*.xls
+*.csv
+*.xlsx
+*.png
 plan_analyse_propice.qmd
 QTDublinIrish.otf
 _extensions
